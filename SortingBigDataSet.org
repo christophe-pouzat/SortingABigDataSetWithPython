@@ -46,5 +46,991 @@ There is no claim that the analysis presented in the sequel is "The" way to anal
 
 I analyzed these data 14 years ago, meaning that I totally forgot I did it then. I'm won't look at my old notes and give next a faithful and therefore rather long record of how I go on analyzing this kind of data.   
 
+The following analysis was performed with the [[https://store.continuum.io/cshop/anaconda/][anaconda]] distribution of =Python 3=.
+
+* Getting the data
+The data are stored in [[http://www.hdfgroup.org/HDF5/][HDF5]] format on the [[https://zenodo.org/][zenodo]] server. They are all contained in a file named =locust20010201.hdf5=. The data within this file have an hierarchical organization similar to the one of a file system (one of the main ideas of the HDF5 format).
+
+The data can be downloaded with =Python= as follows:
+
+#+NAME: download-data
+#+BEGIN_SRC python :exports code :results silent :eval no-export :session *Python*
+try:
+    from urllib.request import urlretrieve # Python 3
+except ImportError:
+    from urllib import urlretrieve # Python 2
+    
+urlretrieve('https://zenodo.org/record/19461/files/locust20010201.hdf5',\
+            'locust20010201.hdf5')
+#+END_SRC
+
+Since the data are in HDF5 format, we need to load the [[http://docs.h5py.org/en/latest/][h5py]] module:
+
+#+NAME: import-h5py
+#+BEGIN_SRC python :session *Python* :results silent
+import h5py
+#+END_SRC
+
+We then open the file in read mode and we print the content of the =LabBook= attribute:
+
+#+NAME: open-locust20010201.hdf5
+#+BEGIN_SRC python :session *Python* :results output :exports both
+f = h5py.File('locust20010201.hdf5','r')
+print(f.attrs['LabBook'])
+#+END_SRC
+
+#+RESULTS: open-locust20010201.hdf5
+#+begin_example
+
+Animal: young adult female
+The data come from the second probe penetration in the right antennal lobe.
+Nice activity on tetrode 9/11/13/16 with response to citral.
+
+Continuous_1: 90 acquisitions 29 seconds long with 1 s between end and start.
+Continuous_2: 20 acquisitions 29 seconds long with 1 s between end and start. 30 MICROMETERS DEEPER TO RECOVER STRONG SIGNAL.
+Citral_1: 50 stimulations with pure citral (3 s before / 1 s citral / 25 s after) 1 s between end and start. AT THE END FEW DROPS OF SOLUTION AND PROBE MOVED 10 MICROMETERS DEEPER.
+Citral_2: 50 stimulations with pure citral (10 s before / 1 s citral / 18 s after) 1 s between end and start.
+Citral_3: 50 stimulations with pure citral (10 s before / 1 s citral / 18 s after) 1 s between end and start.
+Continuous_3: 50 acquisitions 29 seconds long with 1 s between end and start.
+Continuous_4: 50 acquisitions 29 seconds long with 1 s between end and start. THE FIRST 45 ACQUISITIONS ARE AVAILABLE THE LAST 5 HAVE BEEN LOST (CD CORRUPTION).
+#+end_example
+
+We can get the names of the different groups as follows:
+
+#+NAME: print-group-names
+#+BEGIN_SRC python :session *Python* :results output :exports both
+for name in f:
+    print(name)
+#+END_SRC
+
+#+RESULTS: print-group-names
+#+begin_example
+
+
+Citral_1
+Citral_2
+Citral_3
+Continuous_1
+Continuous_2
+Continuous_3
+Continuous_4
+
+#+end_example
+
+We can get the names of the subgroups of group =Continuous_1= with (the result is not shown because it's long):
+
+#+NAME: print-subgroup-of-Continuous_1-names
+#+BEGIN_SRC python :session *Python* :results output :exports code
+for name in f['Continuous_1']:
+    print(name)
+#+END_SRC
+
+#+RESULTS: print-subgroup-of-Continuous_1-names
+#+begin_example
+
+
+trial_01
+trial_02
+trial_03
+trial_04
+trial_05
+trial_06
+trial_07
+trial_08
+trial_09
+trial_10
+trial_11
+trial_12
+trial_13
+trial_14
+trial_15
+trial_16
+trial_17
+trial_18
+trial_19
+trial_20
+trial_21
+trial_22
+trial_23
+trial_24
+trial_25
+trial_26
+trial_27
+trial_28
+trial_29
+trial_30
+trial_31
+trial_32
+trial_33
+trial_34
+trial_35
+trial_36
+trial_37
+trial_38
+trial_39
+trial_40
+trial_41
+trial_42
+trial_43
+trial_44
+trial_45
+trial_46
+trial_47
+trial_48
+trial_49
+trial_50
+trial_51
+trial_52
+trial_53
+trial_54
+trial_55
+trial_56
+trial_57
+trial_58
+trial_59
+trial_60
+trial_61
+trial_62
+trial_63
+trial_64
+trial_65
+trial_66
+trial_67
+trial_68
+trial_69
+trial_70
+trial_71
+trial_72
+trial_73
+trial_74
+trial_75
+trial_76
+trial_77
+trial_78
+trial_79
+trial_80
+trial_81
+trial_82
+trial_83
+trial_84
+trial_85
+trial_86
+trial_87
+trial_88
+trial_89
+trial_90
+
+#+end_example
+
+The content of the =log_file_content= attribute of group =Continuous_1= is visualized with (again not shown because it's too long):
+
+#+NAME: print-log_file_content-attribute-of-Continuous_1
+#+BEGIN_SRC python :session *Python* :results output :exports code
+print(f['Continuous_1'].attrs['log_file_content'])
+#+END_SRC
+
+#+RESULTS: print-log_file_content-attribute-of-Continuous_1
+#+begin_example
+Experiment Parameters:
+  number of trials: 90
+  trial length: 29 sec
+  delay to odor: 3 sec
+  odor duration: 1000 msec
+  interval between start of trials: 30 sec
+  master8 channel: 8
+Continue_1 started recording: 	Thu Feb  1 16:26:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:26:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:26:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:27:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:27:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:27:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:27:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:28:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:28:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:28:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:28:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:29:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:29:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:29:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:29:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:30:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:30:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:30:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:30:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:31:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:31:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:31:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:31:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:32:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:32:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:32:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:32:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:33:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:33:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:33:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:33:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:34:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:34:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:34:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:34:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:35:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:35:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:35:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:35:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:36:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:36:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:36:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:36:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:37:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:37:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:37:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:37:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:38:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:38:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:38:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:38:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:39:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:39:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:39:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:39:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:40:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:40:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:40:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:40:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:41:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:41:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:41:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:41:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:42:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:42:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:42:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:42:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:43:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:43:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:43:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:43:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:44:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:44:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:44:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:44:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:45:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:45:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:45:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:45:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:46:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:46:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:46:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:46:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:47:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:47:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:47:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:47:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:48:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:48:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:48:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:48:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:49:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:49:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:49:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:49:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:50:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:50:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:50:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:50:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:51:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:51:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:51:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:51:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:52:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:52:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:52:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:52:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:53:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:53:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:53:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:53:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:54:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:54:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:54:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:54:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:55:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:55:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:55:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:55:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:56:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:56:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:56:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:56:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:57:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:57:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:57:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:57:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:58:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:58:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:58:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:58:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:59:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:59:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:59:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:59:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:00:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:00:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:00:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:00:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:01:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:01:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:01:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:01:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:02:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:02:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:02:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:02:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:03:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:03:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:03:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:03:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:04:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:04:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:04:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:04:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:05:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:05:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:05:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:05:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:06:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:06:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:06:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:06:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:07:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:07:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:07:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:07:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:08:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:08:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:08:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:08:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:09:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:09:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:09:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:09:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:10:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:10:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:10:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:10:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:11:10 2001
+
+#+end_example
+
+** Getting the data set for model estimation
+
+We are going to follow the tutorial of [[https://github.com/christophe-pouzat/PouzatDetorakisEuroScipy2014][Pouzat and Detorakis (2014)]][fn:PouzatDetorakis2014] that can also be followed in [[http://xtof.perso.math.cnrs.fr/locust_sorting_python.html][HTML version]]. This means that we have to create a list of 1D arrays where each array contains the data from one recording site; we are going to do that using the first trial (=trial_1=), that is the first 29 s, of =Continuous_1=:
+
+#+NAME: assign-data-list
+#+BEGIN_SRC python :session *Python* :results silent :exports code
+ch_names = ['ch09','ch11','ch13','ch16']
+data = [f['Continuous_1']['trial_01'][name][...] for name in ch_names]
+#+END_SRC
+
+** An import remark on the data
+
+*The data are saved in the HDF5 file as they came out of the A/D converter on 16 bit integers*. They were band-pass filtered between 300 and 5 kHz and sampled at 15 kHz. 
+
+* Loading modules and code
+
+We are going to use the usual scientific python modules and we set the interactive mode for =pyplot=:
+
+#+NAME: load-usual-modules
+#+BEGIN_SRC python :session *Python* :results silent
+import numpy as np
+import matplotlib.pyplot as plt
+plt.ion()
+import scipy
+#+END_SRC
+
+We download and then load the sorting specific codes:
+
+#+NAME: download-and-load-sorting_with_python
+#+BEGIN_SRC python :session *Python* :results silent
+urlretrieve('https://github.com/christophe-pouzat/PouzatDetorakisEuroScipy2014/raw/master/sorting_with_python.py',\
+            'sorting_with_python.py')
+import sorting_with_python as swp
+#+END_SRC
+
+* Model / Catalog Estimation
+
+** Preliminary analysis
+We are going to start our analysis by some "sanity checks" to make sure that nothing "weird" happened during the recording.
+
+*** Five number summary 
+We should start by getting an overall picture of the data like the one provided by the =mquantiles= method of module =scipy.stats.mstats= using it to output a [[http://en.wikipedia.org/wiki/Five-number_summary][five-number summary]]. The five numbers are the =minimum=, the =first quartile=, the =median=, the =third quartile= and the =maximum=. Since the data were band-pass filtered between 300 and 5kHz and since they were stored "as they came out of the A/D card" *we do not expect their median value to be 0*.
+
+#+NAME: five-number-summary
+#+BEGIN_SRC python :exports both :session *Python* 
+from scipy.stats.mstats import mquantiles
+np.set_printoptions(precision=3)
+np.array([mquantiles(x,prob=[0,0.25,0.5,0.75,1]) for x in data])
+#+END_SRC
+
+#+RESULTS: five-number-summary
+|  967 | 2016 | 2057 | 2097 | 2443 |
+| 1370 | 2020 | 2057 | 2093 | 2654 |
+| 1128 | 2013 | 2059 | 2103 | 2451 |
+| 1767 | 2021 | 2057 | 2092 | 2300 |
+
+We see that they have similar but not identical inter quartile ranges: 81, 73, 90, 71 as well as similar but not identical domains: 
+
+#+NAME: Continous_1-trial_1-domain
+#+BEGIN_SRC python :exports both :session *Python* 
+[np.ptp(x) for x in data]
+#+END_SRC
+
+#+RESULTS: Continous_1-trial_1-domain
+| 1476 | 1284 | 1323 | 533 |
+
+*** Were the data normalized?
+We can check next if some processing like a division by the /standard deviation/ (SD) has been applied:
+
+#+NAME: data-standard-deviation
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+[np.std(x) for x in data]
+#+END_SRC
+
+#+RESULTS: data-standard-deviation
+: [67.715955603137786,
+:  63.569600931328665,
+:  72.067491426766736,
+:  53.294373692202477]
+
+So no =SD= normalization was applied to these data.
+
+*** Discretization step amplitude
+We can easily obtain the size of the digitization set:
+
+#+NAME: data-discretization-step-amplitude
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+[np.min(np.diff(np.sort(np.unique(x)))) for x in data]
+#+END_SRC
+
+#+RESULTS: data-discretization-step-amplitude
+: [1, 1, 1, 1]
+
+As expected since the data are directly in the format generated by the A/D card.
+
+** Plot the data
+Plotting the data for interactive exploration is trivial. The only trick is to add (or subtract) a proper offest (that we get here using the maximal value of each channel from our five-number summary), this is automatically implemented in our =plot_data_list= function:
+
+#+NAME: make-sure-dir-img-is-here
+#+BEGIN_SRC python :results silent :exports none :session *Python*
+import os
+if not 'img' in os.listdir("."):
+    os.mkdir('img')
+
+#+END_SRC
+
+#+BEGIN_SRC python :results silent :session *Python*
+data_len = len(data[0])
+tt = np.arange(0,data_len)/1.5e4
+swp.plot_data_list(data,tt,0.1)
+plt.xlim([0,29])
+#+END_SRC
+
+The first channel is drawn as is, the second is offset downward by the sum of its maximal value and of the absolute value of the minimal value of the first, etc. We then get something like Fig. \ref{fig:WholeRawData}.
+
+#+NAME: WholeRawData
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/WholeRawData.png")
+"img/WholeRawData.png"
+#+END_SRC
+
+#+CAPTION: The whole (29 s) Locust antennal lobe data set.
+#+ATTR_LATEX: :width 1.0\textwidth
+#+NAME: fig:WholeRawData
+#+RESULTS: WholeRawData
+[[file:img/WholeRawData.png]]
+
+It is also good to "zoom in" and look at the data with a finer time scale (Fig. \ref{fig:First200ms}) with:
+
+#+BEGIN_SRC python :results silent :session *Python* :exports none
+swp.plot_data_list(data,tt,1)
+#+END_SRC
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.xlim([0,0.2])
+#+END_SRC
+
+#+NAME: First200ms
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/First200ms.png")
+plt.close()
+"img/First200ms.png"
+#+END_SRC
+
+#+CAPTION: First 200 ms of the Locust data set.
+#+NAME: fig:First200ms
+#+ATTR_LATEX: :width 1.0\textwidth
+#+RESULTS: First200ms
+[[file:img/First200ms.png]]
+
+We can also zoom directly in an interactive way from the first plot. Doing that, we see that there are no "big" events on =data[3]= that we cannot see on at least one of the other channels.
+
+** Data renormalization
+We are going to use a [[http://en.wikipedia.org/wiki/Median_absolute_deviation][median absolute deviation]] (=MAD=) based renormalization. The goal of the procedure is to scale the raw data such that the /noise SD/ is approximately 1. Since it is not straightforward to obtain a noise SD on data where both signal (/i.e./, spikes) and noise are present, we use this [[http://en.wikipedia.org/wiki/Robust_statistics][robust]] type of statistic for the SD:
+
+#+NAME: raw-data-mad
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+data_mad = list(map(swp.mad,data))
+data_mad
+#+END_SRC
+
+#+RESULTS: raw-data-mad
+: [59.303999999999995,
+:  54.856199999999994,
+:  66.716999999999999,
+:  53.373599999999996]
+
+And we normalize accordingly (we also subtract the =median= which is not 0):
+
+#+NAME: raw-data-median
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+data_median = list(map(np.median,data))
+data_median
+#+END_SRC
+
+#+RESULTS: raw-data-median
+: [2057.0, 2057.0, 2059.0, 2057.0]
+
+#+NAME: normalize-data
+#+BEGIN_SRC python :results silent :session *Python*
+data = list(map(lambda x: (x-np.median(x))/swp.mad(x), data))
+#+END_SRC
+
+** Detect valleys
+We are going to filter the data slightly using a "box" filter of length 5. That is, the data points of the original trace are going to be replaced by the average of themselves with their four nearest neighbors. We will then scale the filtered traces such that the =MAD= is one on each recording sites and keep only the parts of the signal which bellow -4:
+
+#+NAME: filter-data
+#+BEGIN_SRC python :results silent :session *Python*
+from scipy.signal import fftconvolve
+from numpy import apply_along_axis as apply 
+data_filtered = apply(lambda x:
+                      fftconvolve(x,np.array([1,1,1,1,1])/5.,'same'),
+                      1,np.array(data))
+data_filtered = (data_filtered.transpose() / \
+                 apply(swp.mad,1,data_filtered)).transpose()
+data_filtered[data_filtered > -4] = 0
+#+END_SRC
+
+We can see the difference between the /raw/ trace and the /filtered and rectified/ one (Fig. \ref{fig:compare-raw-and-filtered-data}) on which spikes are going to be detected with:
+
+#+BEGIN_SRC python :exports code :results silent :session *Python*
+plt.plot(tt, data[0],color='black')
+plt.axhline(y=-4,color="blue",linestyle="dashed")
+plt.plot(tt, data_filtered[0,],color='red')
+plt.xlim([0,0.2])
+plt.ylim([-20,6])
+plt.xlabel('Time (s)')
+#+END_SRC
+
+#+NAME: compare-raw-and-filtered-data
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/compare-raw-and-filtered-data.png")
+plt.close()
+"img/compare-raw-and-filtered-data.png"  
+#+END_SRC
+
+#+CAPTION: First 200 ms on site 1 of data set =data=. The raw data are shown in black, the detection threshold appears in dashed blue and the filtered and rectified trace on which spike detection is going to be preformed appears in red. 
+#+NAME: fig:compare-raw-and-filtered-data
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS: compare-raw-and-filtered-data
+[[file:img/compare-raw-and-filtered-data.png]]
+
+We now use function =peak= on the sum of the rows of our filtered and rectified version of the data:
+
+#+NAME: sp0
+#+BEGIN_SRC python :results silent :session *Python*
+sp0 = swp.peak(-data_filtered.sum(0))
+#+END_SRC
+
+Giving src_python[:results pp :session *Python*]{len(sp0)} =1060= spikes, a mean inter-event interval of src_python[:results pp :session *Python*]{round(np.mean(np.diff(sp0)))} =407.0= sampling points, a standard deviation of src_python[:results pp :session *Python*]{round(np.std(np.diff(sp0)))} =391.0= sampling points, a smallest inter-event interval of src_python[:results pp :session *Python*]{np.min(np.diff(sp0))} =17= sampling points and a largest of src_python[:results pp :session *Python*]{np.max(np.diff(sp0))} =2991= sampling points.
+
+*** Interactive spike detection check
+We can then check the detection quality with:
+
+#+BEGIN_SRC python :results silent :eval no-export :session *Python*
+swp.plot_data_list_and_detection(data,tt,sp0)
+plt.xlim([0,0.2])
+#+END_SRC
+
+#+NAME: compare-raw-data-and-detected-spikes
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/compare-raw-data-and-detected-spikes.png")
+plt.close()
+"img/compare-raw-data-and-detected-spikes.png"  
+#+END_SRC
+
+#+CAPTION: First 200 ms of data set =data= (black) with detected spikes (red). 
+#+NAME: fig:compare-raw-data-and-detected-spikes
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS: compare-raw-data-and-detected-spikes
+[[file:img/compare-raw-data-and-detected-spikes.png]]
+
+** Cuts
+After detecting our spikes, we must make our cuts in order to create our events' sample. The obvious question we must first address is: How long should our cuts be? The pragmatic way to get an answer is:
++ Make cuts much longer than what we think is necessary, like 50 sampling points on both sides of the detected event's time.
++ Compute robust estimates of the "central" event (with the =median=) and of the dispersion of the sample around this central event (with the =MAD=).
++ Plot the two together and check when does the =MAD= trace reach the background noise level (at 1 since we have normalized the data).
++ Having the central event allows us to see if it outlasts significantly the region where the =MAD= is above the background noise level.
+
+Clearly cutting beyond the time at which the =MAD= hits back the noise level should not bring any useful information as far a classifying the spikes is concerned. So here we perform this task as follows:
+
+#+BEGIN_SRC python :results silent :session *Python*
+evts = swp.mk_events(sp0,np.array(data),49,50)
+evts_median=apply(np.median,0,evts)
+evts_mad=apply(swp.mad,0,evts)
+#+END_SRC
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.plot(evts_median, color='red', lw=2)
+plt.axhline(y=0, color='black')
+for i in np.arange(0,400,100): 
+    plt.axvline(x=i, color='black', lw=2)
+
+for i in np.arange(0,400,10): 
+    plt.axvline(x=i, color='grey')
+
+plt.plot(evts_median, color='red', lw=2)
+plt.plot(evts_mad, color='blue', lw=2)
+#+END_SRC
+
+#+NAME: check-MAD-on-long-cuts
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/check-MAD-on-long-cuts.png")
+plt.close()
+'img/check-MAD-on-long-cuts.png'  
+#+END_SRC
+
+#+CAPTION: Robust estimates of the central event (black) and of the sample's dispersion around the central event (red) obtained with "long" (100 sampling points) cuts. We see clearly that the dispersion is back to noise level 15 points before the peak and 30 points after the peak. We also see that =data[3]= brings very little information.
+#+NAME: fig:check-MAD-on-long-cuts
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS: check-MAD-on-long-cuts
+[[file:img/check-MAD-on-long-cuts.png]]
+
+Fig. \ref{fig:check-MAD-on-long-cuts} clearly shows that starting the cuts 15 points before the peak and ending them 30 points after should fulfill our goals. We also see that the central event slightly outlasts the window where the =MAD= is larger than 1 and that =data[3]= brings very little information.
+
+*** Events
+Once we are satisfied with our spike detection, at least in a provisory way, and that we have decided on the length of our cuts, we proceed by making =cuts= around the detected events. :
+
+#+NAME: evts
+#+BEGIN_SRC python :exports code :results silent :session *Python*
+evts = swp.mk_events(sp0,np.array(data),14,30)
+#+END_SRC
+
+We can visualize the first 200 events with:
+
+#+BEGIN_SRC python :results silent :session *Python*
+swp.plot_events(evts,200)
+#+END_SRC
+ 
+#+name: first-200-of-evts
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/first-200-of-evts.png")
+plt.close()
+'img/first-200-of-evts.png'  
+#+END_SRC
+
+#+CAPTION: First 200 events of =evts=. Cuts from the four recording sites appear one after the other. The background (white / grey) changes with the site. In red, /robust/ estimate of the "central" event obtained by computing the pointwise median. In blue, /robust/ estimate of the scale (SD) obtained by computing the pointwise =MAD=. 
+#+LABEL: fig:first-200-of-evts
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS: first-200-of-evts
+[[file:img/first-200-of-evts.png]]
+
+*** Noise
+Getting an estimate of the noise statistical properties is an essential ingredient to build respectable goodness of fit tests. In our approach "noise events" are essentially anything that is not an "event" is the sense of the previous section. I wrote essentially and not exactly since there is a little twist here which is the minimal distance we are willing to accept between the reference time of a noise event and the reference time of the last preceding and of the first following "event". We could think that keeping a cut length on each side would be enough. That would indeed be the case if /all/ events were starting from and returning to zero within a cut. But this is not the case with the cuts parameters we chose previously (that will become clear soon). You might wonder why we chose so short a cut length then. Simply to avoid having to deal with too many superposed events which are the really bothering events for anyone wanting to do proper sorting. 
+To obtain our noise events we are going to use function =mk_noise= which takes the /same/ arguments as function =mk_events= plus two numbers: 
++ =safety_factor= a number by which the cut length is multiplied and which sets the minimal distance between the reference times discussed in the previous paragraph.
++ =size= the maximal number of noise events one wants to cut (the actual number obtained might be smaller depending on the data length, the cut length, the safety factor and the number of events).
+
+We cut noise events with a rather large safety factor:
+
+#+NAME: noise
+#+BEGIN_SRC python :exports code :results silent :session *Python*
+noise = swp.mk_noise(sp0,np.array(data),14,30,safety_factor=2.5,size=2000)
+#+END_SRC
+
+Calling (results not shown):
+
+#+BEGIN_SRC python :exports code :results silent :session *Python* :eval never
+swp.plot_events(noise,200)
+#+END_SRC
+
+shows that our "safety factor" was large enough.
+
+*** Getting "clean" events
+Our spike sorting has two main stages, the first one consist in estimating a *model* and the second one consists in using this model to *classify* the data. Our *model* is going to be built out of reasonably "clean" events. Here by clean we mean events which are not due to a nearly simultaneous firing of two or more neurons; and simultaneity is defined on the time scale of one of our cuts. When the model will be subsequently used to classify data, events are going to decomposed into their (putative) constituent when they are not "clean", that is, *superposition are going to be looked and accounted for*. 
+
+In order to eliminate the most obvious superpositions we are going to use a rather brute force approach, looking at the sides of the central peak of our median event and checking if individual events are not too large there, that is do not exhibit extra peaks. We first define a function doing this job:
+
+#+NAME: good_evts_fct
+#+BEGIN_SRC python :exports code :results silent :session *Python*
+def good_evts_fct(samp, thr=3):
+    samp_med = apply(np.median,0,samp)
+    samp_mad = apply(swp.mad,0,samp)
+    above = samp_med > 0
+    samp_r = samp.copy()
+    for i in range(samp.shape[0]): samp_r[i,above] = 0
+    samp_med[above] = 0
+    res = apply(lambda x:
+                np.all(abs((x-samp_med)/samp_mad) < thr),
+                1,samp_r)
+    return res
+
+#+END_SRC
+
+We then apply our new function to our sample using a threshold of 6 (set by trial and error starting from 8):
+
+#+NAME: goodEvts
+#+BEGIN_SRC python :exports code :results silent :session *Python*
+goodEvts = good_evts_fct(evts,6)
+#+END_SRC
+
+Out of src_python[:results pp :session *Python*]{len(goodEvts)} =1060= events we get src_python[:results pp :session *Python*]{sum(goodEvts)} =1051= "good" ones. As usual, the first 200 good ones can be visualized with:
+
+#+BEGIN_SRC python :eval no-export :results silent :session *Python*
+swp.plot_events(evts[goodEvts,:][:200,:]) 
+#+END_SRC 
+
+while the bad guys can be visualized with:
+
+#+BEGIN_SRC python :eval no-export :results silent :session *Python*
+swp.plot_events(evts[goodEvts.__neg__(),:],
+                show_median=False,
+                show_mad=False)
+#+END_SRC
+
+We see that these events are not superpositions and we will work with the whole sample.
+
+** Dimension reduction :export:
+
+*** Principal Component Analysis (PCA)
+Our events are living right now in an 180 dimensional space (our cuts are 45 sampling points long and we are working with 4 recording sites simultaneously). It turns out that it hard for most humans to perceive structures in such spaces. It also hard, not to say impossible with a realistic sample size, to estimate probability densities (which is what model based clustering algorithms are actually doing) in such spaces, unless one is ready to make strong assumptions about these densities. It is therefore usually a good practice to try to reduce the dimension of the [[http://en.wikipedia.org/wiki/Sample_space][sample space]] used to represent the data. We are going to that with [[http://en.wikipedia.org/wiki/Principal_component_analysis][principal component analysis]] (=PCA=), using it on our "good" events. 
+
+#+NAME: PCA
+#+BEGIN_SRC python :exports code :results silent :session *Python*
+from numpy.linalg import svd
+varcovmat = np.cov(evts.T)
+u, s, v = svd(varcovmat)
+#+END_SRC
+
+With this "back to the roots" approach, =u= should be an orthonormal matrix whose column are made of the =principal components= (and =v= should be the transpose of =u= since our matrix =varcovmat= is symmetric and real by construction). =s= is a vector containing the amount of sample variance explained by each principal component.
+
+*** Exploring =PCA= results
+=PCA= is a rather abstract procedure to most of its users, at least when they start using it. But one way to grasp what it does is to plot the =mean event= plus or minus, say five times, each principal components like:
+
+#+BEGIN_SRC python :session *Python*  :exports code :results silent :session *Python*
+evt_idx = range(180)
+evts_good_mean = np.mean(evts,0)
+for i in range(4):
+    plt.subplot(2,2,i+1)
+    plt.plot(evt_idx,evts_good_mean, 'black',evt_idx,
+             evts_good_mean + 5 * u[:,i],
+             'red',evt_idx,evts_good_mean - 5 * u[:,i], 'blue')
+    plt.title('PC' + str(i) + ': ' + str(round(s[i]/sum(s)*100)) +'%')
+
+#+END_SRC
+
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/explore-evts-PC0to3.png")
+plt.close()
+"img/explore-evts-PC0to3.png"  
+#+END_SRC
+
+#+CAPTION: PCA of =evts= exploration (PC 1 to 4). Each of the 4 graphs shows the mean waveform (black), the mean waveform + 5 x PC (red), the mean - 5 x PC (blue) for each of the first 4 PCs. The fraction of the total variance "explained" by the component appears in the title of each graph.
+#+NAME: fig:explore-evts-PC0to3
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/explore-evts-PC0to3.png]]
+
+We now look at the next 4 principal components:
+
+#+BEGIN_SRC python  :exports code :results silent :session *Python*
+for i in range(4,8):
+    plt.subplot(2,2,i-3)
+    plt.plot(evt_idx,evts_good_mean, 'black',
+             evt_idx,evts_good_mean + 5 * u[:,i], 'red',
+             evt_idx,evts_good_mean - 5 * u[:,i], 'blue')
+    plt.title('PC' + str(i) + ': ' + str(round(s[i]/sum(s)*100)) +'%')
+
+#+END_SRC
+
+#+BEGIN_SRC python  :exports results :results file :session *Python*
+plt.savefig("img/explore-evts-PC4to7.png")
+plt.close()
+"img/explore-evts-PC4to7.png"  
+#+END_SRC
+
+#+CAPTION: PCA of =evts= exploration (PC 4 to 7). Each of the 4 graphs shows the mean waveform (black), the mean waveform + 5 x PC (red), the mean - 5 x PC (blue). The fraction of the total variance "explained" by the component appears in between parenthesis in the title of each graph. 
+#+NAME: fig:explore-evts-PC4to7
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/explore-evts-PC4to7.png]]
+
+*** Static representation of the projected data
+We can build a =scatter plot matrix= showing the projections of our "good" events sample onto the plane defined by pairs of the few first PCs:
+
+#+NAME: scatter-plot-matrix-on-PC
+#+BEGIN_SRC python  :exports code :results silent :session *Python*
+evts_good_P0_to_P3 = np.dot(evts,u[:,0:4])
+from pandas.tools.plotting import scatter_matrix
+import pandas as pd
+df = pd.DataFrame(evts_good_P0_to_P3)
+scatter_matrix(df,alpha=0.2,s=4,c='k',figsize=(6,6),
+               diagonal='kde',marker=".")
+ 
+#+END_SRC
+
+#+NAME: scatter-plot-matrix-on-PC-b
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig('img/scatter-plot-matrix-on-PC.png')
+plt.close()
+'img/scatter-plot-matrix-on-PC.png'
+#+END_SRC
+
+#+RESULTS: scatter-plot-matrix-on-PC-b
+[[file:img/scatter-plot-matrix-on-PC.png]]
+
+*** Dynamic visualization of the data with =GGobi=
+The best way to discern structures in "high dimensional" data is to dynamically visualize them. To this end, the tool of choice is [[http://www.ggobi.org/][GGobi]], an open source software available on =Linux=, =Windows= and =MacOS=. We start by exporting our data in =csv= format to our disk:
+
+#+NAME: ToGGobi1
+#+BEGIN_SRC python :results silent :session *Python*
+import csv
+f = open('evts.csv','w')
+w = csv.writer(f)
+w.writerows(np.dot(evts,u[:,:6]))
+f.close()
+#+END_SRC
+
+The following terse procedure should allow the reader to get going with =GGobi=:
++ Launch =GGobi=
++ In menu: =File= -> =Open=, select =evtsE.csv=.
++ Since the glyphs are rather large, start by changing them for smaller ones:
+ - Go to menu: =Interaction= -> =Brush=.
+ - On the Brush panel which appeared check the =Persistent= box.
+ - Click on =Choose color & glyph...=.
+ - On the chooser which pops out, click on the small dot on the upper left of the left panel.
+ - Go back to the window with the data points.
+ - Right click on the lower right corner of the rectangle which appeared on the figure after you selected =Brush=.
+ - Dragg the rectangle corner in order to cover the whole set of points.
+ - Go back to the =Interaction= menu and select the first row to go back where you were at the start.
++ Select menu: =View= -> =Rotation=.
++ Adjust the speed of the rotation in order to see things properly.
+We easily discern 7 rather well separated clusters. Meaning that an automatic clustering with 10 clusters on the first 3 principal components should do the job.
+
+** Clustering with K-Means
+Since our dynamic visualization shows 7 well separated clusters in 3 dimension, a simple [[http://en.wikipedia.org/wiki/K-means_clustering][k-means]] should do the job. We are using here the [[http://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html#sklearn.cluster.KMeans][KMeans]] class of [[http://scikit-learn.org/stable/index.html][scikit-learn]]: 
+
+#+NAME: KMEANS
+#+BEGIN_SRC python :results silent :session *Python*
+from sklearn.cluster import KMeans
+km7 = KMeans(n_clusters=7, init='k-means++', n_init=100, max_iter=100)
+km7.fit(np.dot(evts,u[:,0:3]))
+c7 = km7.fit_predict(np.dot(evts,u[:,0:3]))
+#+END_SRC
+
+In order to facilitate comparison when models with different numbers of clusters or when different models are used, clusters are sorted by "size". The size is defined here as the sum of the absolute value of the median of the cluster (an L1 norm):
+
+#+NAME: c7b
+#+BEGIN_SRC python :results silent :session *Python*
+cluster_median = list([(i,
+                        np.apply_along_axis(np.median,0,
+                                            evts[c7 == i,:]))
+                                            for i in range(7)
+                                            if sum(c7 == i) > 0])
+cluster_size = list([np.sum(np.abs(x[1])) for x in cluster_median])
+new_order = list(reversed(np.argsort(cluster_size)))
+new_order_reverse = sorted(range(len(new_order)), key=new_order.__getitem__)
+c7b = [new_order_reverse[i] for i in c7]
+#+END_SRC
+
+*** Cluster specific plots
+Looking at the first 4 clusters we get Fig. \ref{fig:events-clusters0to3} with:
+
+#+BEGIN_SRC python :results silent :session *Python* 
+plt.subplot(411)
+swp.plot_events(evts[np.array(c7b) == 0,:])
+plt.ylim([-20,15])
+plt.subplot(412)
+swp.plot_events(evts[np.array(c7b) == 1,:])
+plt.ylim([-20,15])
+plt.subplot(413)
+swp.plot_events(evts[np.array(c7b) == 2,:])
+plt.ylim([-20,15])
+plt.subplot(414)
+swp.plot_events(evts[np.array(c7b) == 3,:])
+plt.ylim([-20,15])
+#+END_SRC
+
+#+BEGIN_SRC python  :exports results :results file :session *Python*
+plt.savefig('img/events-clusters0to3.png')
+plt.close()
+'img/events-clusters0to3.png'
+#+END_SRC
+
+#+CAPTION: First 4 clusters. Cluster 0 at the top, cluster 4 at the bottom. Red, cluster specific central / median event. Blue, cluster specific =MAD=. 
+#+NAME: fig:events-clusters0to3
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/events-clusters0to3.png]]
+
+Looking at the last 3 clusters we get Fig. \ref{fig:events-clusters5to9} with:
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.subplot(311)
+swp.plot_events(evts[np.array(c7b) == 4,:])
+plt.ylim([-20,15])
+plt.subplot(312)
+swp.plot_events(evts[np.array(c7b) == 5,:])
+plt.ylim([-20,15])
+plt.subplot(313)
+swp.plot_events(evts[np.array(c7b) == 6,:])
+plt.ylim([-20,15])
+#+END_SRC
+
+#+BEGIN_SRC python :session *Python* :exports results :results file :session *Python*
+plt.savefig('img/events-clusters4to6.png')
+plt.close()
+'img/events-clusters4to6.png'
+#+END_SRC
+
+#+CAPTION: Last 3 clusters. Cluster 4 at the top, cluster 6 at the bottom. Red, cluster specific central / median event. Blue, cluster specific =MAD=. Notice the change in ordinate scale compared to the previous figure.
+#+NAME: fig:events-clusters4to6
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/events-clusters4to6.png]]
+
+*** Results inspection with =GGobi= :export:
+
+We start by checking our clustering quality with =GGobi=. To this end we export the data and the labels of each event:
+
+#+NAME: ToGGobi2
+#+BEGIN_SRC python :results silent :session *Python*
+f = open('evts_sorted.csv','w')
+w = csv.writer(f)
+w.writerows(np.concatenate((np.dot(evts,u[:,:6]),
+                            np.array([c7b]).T),
+                            axis=1))
+f.close()
+#+END_SRC
+
+An again succinct description of how to do the dynamical visual check is:
++ Load the new data into GGobi like before.
++ In menu: =Display= -> =New Scatterplot Display=, select =evtsEsorted.csv=.
++ Change the glyphs like before.
++ In menu: =Tools= -> =Color Schemes=, select a scheme with 10 colors, like =Spectral=, =Spectral 10=.
++ In menu: =Tools= -> =Automatic Brushing=, select =evtsEsorted.csv= tab and, within this tab, select variable =c10b=. Then click on =Apply=.
++ Select =View= -> =Rotation= like before and see your result. 
+
+
 [fn:PouzatMazorLaurent2002] C. Pouzat, O. Mazor and G. Laurent (2002) [[http://xtof.perso.math.cnrs.fr/pdf/Pouzat+:2002.pdf][Using noise signature to optimize spike-sorting and to assess neuronal classification quality.]] /Journal of Neuroscience Methods/ *122*: 43-57.
 [fn:Pouzat2014] Pouzat, Christophe. (2015). Peri-Stimulus Time Histograms Estimation Through Poisson Regression Without Generalized Linear Models. Zenodo. [[http://dx.doi.org/10.5281/zenodo.14660][10.5281/zenodo.14660]].
+[fn:PouzatDetorakis2014] Christophe Pouzat. (2015). PouzatDetorakisEuroScipy2014: Complet avec référence. Zenodo. [[http://dx.doi.org/10.5281/zenodo.15070][10.5281/zenodo.15070]].
+
