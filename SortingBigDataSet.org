@@ -1,0 +1,50 @@
+#+TITLE: Sorting a Big Data Set With Python
+#+AUTHOR: Christophe Pouzat
+#+EMAIL: christophe.pouzat@parisdescartes.fr
+#+OPTIONS: ':nil *:t -:t ::t <:t H:3 \n:nil ^:t arch:headline
+#+OPTIONS: author:t c:nil creator:comment d:(not "LOGBOOK") date:t
+#+OPTIONS: e:t email:nil f:t inline:t num:t p:nil pri:nil stat:t
+#+OPTIONS: tags:t tasks:t tex:t timestamp:t toc:t todo:t |:t
+#+CREATOR: Emacs 24.5.1 (Org mode 8.2.10)
+#+DESCRIPTION:
+#+EXCLUDE_TAGS: noexport
+#+KEYWORDS:
+#+LANGUAGE: en
+#+SELECT_TAGS: export
+#+LaTeX_HEADER: \usepackage[backend=biber,style=authoryear,citestyle=authoryear-comp,isbn=false,url=false,eprint=false,doi=false,note=false]{biblatex}
+#+LaTeX_HEADER: \usepackage{alltt}
+#+LaTeX_HEADER: \usepackage[usenames,dvipsnames]{xcolor}
+#+LaTeX_HEADER: \renewenvironment{verbatim}{\begin{alltt} \scriptsize \color{Bittersweet} \vspace{0.2cm} }{\vspace{0.2cm} \end{alltt} \normalsize \color{black}}
+#+LaTeX_HEADER: \definecolor{lightcolor}{gray}{.55}
+#+LaTeX_HEADER: \definecolor{shadecolor}{gray}{.85}
+#+LaTeX_HEADER: \usepackage{minted}
+#+LATEX_HEADER: \bibliography{SortingBigDataSet}
+#+PROPERTY: header-args:python:  :session *Python*
+
+#+NAME: org-latex-set-up
+#+BEGIN_SRC emacs-lisp :results silent :exports none
+(setq org-latex-listings 'minted)
+(add-to-list 'org-latex-minted-langs
+               '(R "r"))
+(add-to-list 'org-latex-minted-langs
+               '(maxima "r"))
+(setq org-latex-minted-options
+      '(("bgcolor" "shadecolor")
+	("fontsize" "\\scriptsize")))       
+(setq org-latex-pdf-process
+      '("pdflatex -shell-escape -interaction nonstopmode -output-directory %o %f"
+	"biber %b" 
+	"pdflatex -shell-escape -interaction nonstopmode -output-directory %o %f" 
+	"pdflatex -shell-escape -interaction nonstopmode -output-directory %o %f"))
+#+END_SRC
+
+* Introduction
+
+The purpose of this document is to expose in a comprehensive way how the spike sorting of a "large" data set can be performed with "simple" tools built around the =Python= language. The data were recorded from a locust /Schistocerca americana/ antennal lobe (the first olfactory relay, equivalent of the /olfactory bulb/ of vertebrates). A total of 1 hour and 40 minutes of spontaneous activity was recorded as as responses to 150 stimulation with citral. The set is publicly available on [[https://zenodo.org/record/19461?ln=en#.VaeBSzLLpRQ][zenodo]] (DOI: [[http://dx.doi.org/10.5281/zenodo.19461][10.5281/zenodo.19461]]). The recording setting is described in Pouzat, Mazor and Laurent (2002)[fn:PouzatMazorLaurent2002] and a picture of the recording situation can be seen of the third slide of Pouzat (2014)[fn:Pouzat2014]. The purpose of these long recordings was probing interactions between neurons and how they are modified by a stimulus.
+
+There is no claim that the analysis presented in the sequel is "The" way to analyze these data; it is just one /working/ way. The motivation, as a referee, is to have an explicit example to show to authors who all too often tend to analyze their data /en bloc/. I'm advocating instead a piecemeal approach were a first stretch of data is initially used to build a model--that is, a catalog of waveform, one per neuron and per recording site--while template matching is applied to the subsequent recorded minutes using a simple trend tracking.
+
+I analyzed these data 14 years ago, meaning that I totally forgot I did it then. I'm won't look at my old notes and give next a faithful and therefore rather long record of how I go on analyzing this kind of data.   
+
+[fn:PouzatMazorLaurent2002] C. Pouzat, O. Mazor and G. Laurent (2002) [[http://xtof.perso.math.cnrs.fr/pdf/Pouzat+:2002.pdf][Using noise signature to optimize spike-sorting and to assess neuronal classification quality.]] /Journal of Neuroscience Methods/ *122*: 43-57.
+[fn:Pouzat2014] Pouzat, Christophe. (2015). Peri-Stimulus Time Histograms Estimation Through Poisson Regression Without Generalized Linear Models. Zenodo. [[http://dx.doi.org/10.5281/zenodo.14660][10.5281/zenodo.14660]].
