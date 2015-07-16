@@ -7,10 +7,8 @@
 #+OPTIONS: tags:t tasks:t tex:t timestamp:t toc:t todo:t |:t
 #+CREATOR: Emacs 24.5.1 (Org mode 8.2.10)
 #+DESCRIPTION:
-#+EXCLUDE_TAGS: noexport
 #+KEYWORDS:
 #+LANGUAGE: en
-#+SELECT_TAGS: export
 #+LaTeX_HEADER: \usepackage[backend=biber,style=authoryear,citestyle=authoryear-comp,isbn=false,url=false,eprint=false,doi=false,note=false]{biblatex}
 #+LaTeX_HEADER: \usepackage{alltt}
 #+LaTeX_HEADER: \usepackage[usenames,dvipsnames]{xcolor}
@@ -75,8 +73,8 @@ We then open the file in read mode and we print the content of the =LabBook= att
 
 #+NAME: open-locust20010201.hdf5
 #+BEGIN_SRC python :session *Python* :results output :exports both
-f = h5py.File('locust20010201.hdf5','r')
-print(f.attrs['LabBook'])
+hdf = h5py.File('locust20010201.hdf5','r')
+print(hdf.attrs['LabBook'])
 #+END_SRC
 
 #+RESULTS: open-locust20010201.hdf5
@@ -99,7 +97,7 @@ We can get the names of the different groups as follows:
 
 #+NAME: print-group-names
 #+BEGIN_SRC python :session *Python* :results output :exports both
-for name in f:
+for name in hdf:
     print(name)
 #+END_SRC
 
@@ -121,7 +119,7 @@ We can get the names of the subgroups of group =Continuous_1= with (the result i
 
 #+NAME: print-subgroup-of-Continuous_1-names
 #+BEGIN_SRC python :session *Python* :results output :exports code
-for name in f['Continuous_1']:
+for name in hdf['Continuous_1']:
     print(name)
 #+END_SRC
 
@@ -226,7 +224,7 @@ The content of the =log_file_content= attribute of group =Continuous_1= is visua
 
 #+NAME: print-log_file_content-attribute-of-Continuous_1
 #+BEGIN_SRC python :session *Python* :results output :exports code
-print(f['Continuous_1'].attrs['log_file_content'])
+print(hdf['Continuous_1'].attrs['log_file_content'])
 #+END_SRC
 
 #+RESULTS: print-log_file_content-attribute-of-Continuous_1
@@ -428,7 +426,7 @@ We are going to follow the tutorial of [[https://github.com/christophe-pouzat/Po
 #+NAME: assign-data-list
 #+BEGIN_SRC python :session *Python* :results silent :exports code
 ch_names = ['ch09','ch11','ch13','ch16']
-data = [f['Continuous_1']['trial_01'][name][...] for name in ch_names]
+data = [hdf['Continuous_1']['trial_01'][name][...] for name in ch_names]
 #+END_SRC
 
 ** An import remark on the data
@@ -449,10 +447,14 @@ import scipy
 
 We download and then load the sorting specific codes:
 
-#+NAME: download-and-load-sorting_with_python
+#+NAME: download-sorting_with_python
 #+BEGIN_SRC python :session *Python* :results silent
 urlretrieve('https://github.com/christophe-pouzat/PouzatDetorakisEuroScipy2014/raw/master/sorting_with_python.py',\
             'sorting_with_python.py')
+#+END_SRC
+
+#+NAME: load-sorting_with_python
+#+BEGIN_SRC python :session *Python* :results silent
 import sorting_with_python as swp
 #+END_SRC
 
@@ -808,7 +810,7 @@ swp.plot_events(evts[goodEvts.__neg__(),:],
 
 We see that these events are not superpositions and we will work with the whole sample.
 
-** Dimension reduction :export:
+** Dimension reduction
 
 *** Principal Component Analysis (PCA)
 Our events are living right now in an 180 dimensional space (our cuts are 45 sampling points long and we are working with 4 recording sites simultaneously). It turns out that it hard for most humans to perceive structures in such spaces. It also hard, not to say impossible with a realistic sample size, to estimate probability densities (which is what model based clustering algorithms are actually doing) in such spaces, unless one is ready to make strong assumptions about these densities. It is therefore usually a good practice to try to reduce the dimension of the [[http://en.wikipedia.org/wiki/Sample_space][sample space]] used to represent the data. We are going to that with [[http://en.wikipedia.org/wiki/Principal_component_analysis][principal component analysis]] (=PCA=), using it on our "good" events. 
@@ -903,10 +905,10 @@ The best way to discern structures in "high dimensional" data is to dynamically 
 #+NAME: ToGGobi1
 #+BEGIN_SRC python :results silent :session *Python*
 import csv
-f = open('evts.csv','w')
-w = csv.writer(f)
+g = open('evts.csv','w')
+w = csv.writer(g)
 w.writerows(np.dot(evts,u[:,:6]))
-f.close()
+g.close()
 #+END_SRC
 
 The following terse procedure should allow the reader to get going with =GGobi=:
@@ -969,7 +971,7 @@ swp.plot_events(evts[np.array(c7b) == 3,:])
 plt.ylim([-20,15])
 #+END_SRC
 
-#+BEGIN_SRC python  :exports results :results file :session *Python*
+#+BEGIN_SRC python :exports results :results file :session *Python*
 plt.savefig('img/events-clusters0to3.png')
 plt.close()
 'img/events-clusters0to3.png'
@@ -1007,18 +1009,18 @@ plt.close()
 #+RESULTS:
 [[file:img/events-clusters4to6.png]]
 
-*** Results inspection with =GGobi= :export:
+*** Results inspection with =GGobi=
 
 We start by checking our clustering quality with =GGobi=. To this end we export the data and the labels of each event:
 
 #+NAME: ToGGobi2
 #+BEGIN_SRC python :results silent :session *Python*
-f = open('evts_sorted.csv','w')
-w = csv.writer(f)
+g = open('evts_sorted.csv','w')
+w = csv.writer(g)
 w.writerows(np.concatenate((np.dot(evts,u[:,:6]),
                             np.array([c7b]).T),
                             axis=1))
-f.close()
+g.close()
 #+END_SRC
 
 An again succinct description of how to do the dynamical visual check is:
