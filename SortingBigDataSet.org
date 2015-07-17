@@ -1050,7 +1050,7 @@ cluster_median2 = list([(i,
                         if sum(c2 == i) > 0])
 cluster_size2 = list([np.sum(np.abs(x[1])) for x in cluster_median2])
 new_order2 = list(reversed(np.argsort(cluster_size2)))
-new_order_reverse2 = sorted(range(len(new_order2)), key=new_order.__getitem__)
+new_order_reverse2 = sorted(range(len(new_order2)), key=new_order2.__getitem__)
 c2b = [new_order_reverse2[i] for i in c2]
 #+END_SRC
   
@@ -1091,7 +1091,7 @@ cluster_medianB = list([(i,
                         if sum(cB == i) > 0])
 cluster_sizeB = list([np.sum(np.abs(x[1])) for x in cluster_medianB])
 new_orderB = list(reversed(np.argsort(cluster_sizeB)))
-new_order_reverseB = sorted(range(len(new_orderB)), key=new_order.__getitem__)
+new_order_reverseB = sorted(range(len(new_orderB)), key=new_orderB.__getitem__)
 cBb = [new_order_reverseB[i] for i in cB]
 #+END_SRC
 
@@ -1106,7 +1106,7 @@ swp.plot_events(evts[np.array(c7b) == 1,:][np.array(cBb) == 1,:])
 plt.ylim([-20,15])
 #+END_SRC
 
-#+BEGIN_SRC python :session *Python* :exports results :results file :session *Python*
+#+BEGIN_SRC python :session *Python* :exports results :results file
 plt.savefig('img/events-cluster1splitGMM.png')
 plt.close()
 'img/events-cluster1splitGMM.png'
@@ -1118,7 +1118,23 @@ plt.close()
 #+RESULTS:
 [[file:img/events-cluster1splitGMM.png]]
 
-This does what we wanted. That also suggests that redoing our initial clustering with a GMM is worth trying (this was tried, not shown, but did not work out better).
+This does what we wanted. That also suggests that redoing our initial clustering with a GMM is worth trying (and it was tried, not shown, but did not work out better).
+
+*** Construction of a labeling with 8 units
+
+We will go further from this point by splitting the second cluster in two as we just did. The eighth cluster is going to be the less numerous of the two we just obtained.
+
+#+NAME: labeling-with-8
+#+BEGIN_SRC python :session *Python* :results silent
+c8 = c7b.copy()
+B_idx = 0
+for idx in range(len(c8)):
+    if c8[idx] == 1:
+        if cBb[B_idx] == 0:
+            c8[idx] = 7
+        B_idx += 1
+
+#+END_SRC 
 
 ** Clustering with a Gaussian Mixture Model (GMM) :noexport:
 
@@ -1243,4 +1259,151 @@ plt.ylim([-20,15])
 [fn:PouzatMazorLaurent2002] C. Pouzat, O. Mazor and G. Laurent (2002) [[http://xtof.perso.math.cnrs.fr/pdf/Pouzat+:2002.pdf][Using noise signature to optimize spike-sorting and to assess neuronal classification quality.]] /Journal of Neuroscience Methods/ *122*: 43-57.
 [fn:Pouzat2014] Pouzat, Christophe. (2015). Peri-Stimulus Time Histograms Estimation Through Poisson Regression Without Generalized Linear Models. Zenodo. [[http://dx.doi.org/10.5281/zenodo.14660][10.5281/zenodo.14660]].
 [fn:PouzatDetorakis2014] Christophe Pouzat. (2015). PouzatDetorakisEuroScipy2014: Complet avec référence. Zenodo. [[http://dx.doi.org/10.5281/zenodo.15070][10.5281/zenodo.15070]].
+
+
+** Spike "peeling": a "Brute force" superposition resolution :export:
+We are going to resolve (the most "obvious") superpositions by a "recursive peeling method":
+1. Events are detected and cut from the raw data /or from an already peeled version of the data/.
+2. The closest center (in term of Euclidean distance) to the event is found.
+3. If the residual sum of squares (=RSS=), that is: (actual data - best center)$^2$, is smaller than the squared norm of a cut, the best center is subtracted from the data on which detection was performed---jitter is again compensated for at this stage.
+4. Go back to step 1 or stop. 
+
+To apply this procedure, we need, for each cluster, estimates of its center and of its first two derivatives. Function =mk_center_dictionary= does the job for us. We must moreover build our clusters' centers such that they can be used for subtraction, /this implies that we should make them long enough, on both side of the peak, to see them go back to baseline/. Formal parameters =before= and =after= bellow should therefore be set to larger values than the ones used for clustering: 
+
+#+NAME: centers
+#+BEGIN_SRC python :results silent :session *Python*
+centers = { "Cluster " + str(i) :
+            swp.mk_center_dictionary(sp0[np.array(c8)==i],
+                                     np.array(data))
+            for i in range(8)}
+#+END_SRC
+
+*** First peeling :export:
+Function =classify_and_align_evt= is used next. For each detected event, it matches the closest template, correcting for the jitter, if the closest template is close enough:
+
+#+BEGIN_SRC python :results pp :exports both :session *Python*
+swp.classify_and_align_evt(sp0[0],np.array(data),centers)
+#+END_SRC
+
+#+RESULTS:
+: ['Cluster 4', 41, -0.76918445702167082]
+
+We can use the function on every detected event. A trick here is to store the matrix version of the data in order to avoid the conversion of the list of vectors (making the data of the different channels) into a matrix for each detected event:
+
+#+NAME: round0
+#+BEGIN_SRC python :results silent :session *Python*
+data0 = np.array(data) 
+round0 = [swp.classify_and_align_evt(sp0[i],data0,centers)
+          for i in range(len(sp0))]
+#+END_SRC
+
+We can check how many events got unclassified on a total of src_python[:results pp :session *Python*]{len(sp0)} =2325=:
+
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+len([x[1] for x in round0 if x[0] == '?'])
+#+END_SRC
+
+#+RESULTS:
+: 56
+
+Using function =predict_data=, we create an ideal data trace given events' positions, events' origins and a clusters' catalog:
+
+#+NAME: pred0
+#+BEGIN_SRC python :results silent :session *Python*
+pred0 = swp.predict_data(round0,centers,data0.shape[0],data0.shape[1])
+#+END_SRC
+
+#+NAME: data1
+#+BEGIN_SRC python :results silent :session *Python*
+data1 = data0 - pred0
+#+END_SRC
+
+We can compare the original data with the result of the "first peeling" to get Fig. \ref{fig:FirstPeeling}:
+
+#+BEGIN_SRC python :results silent :session *Python* 
+plt.plot(tt, data0[0,], color='black')
+plt.plot(tt, data1[0,], color='red',lw=0.7)
+plt.plot(tt, data0[1,]-20, color='black')
+plt.plot(tt, data1[1,]-20, color='red',lw=0.7)
+plt.plot(tt, data0[2,]-40, color='black')
+plt.plot(tt, data1[2,]-40, color='red',lw=0.7)
+plt.plot(tt, data0[3,]-60, color='black')
+plt.plot(tt, data1[3,]-60, color='red',lw=0.7)
+plt.xlabel('Time (s)')
+plt.xlim([2.45,2.55])
+#+END_SRC
+
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/FirstPeeling.png")
+plt.close()
+"img/FirstPeeling.png"
+#+END_SRC
+
+#+CAPTION: 100 ms of data. Black, original data; red, after first peeling.
+#+NAME: fig:FirstPeeling
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/FirstPeeling.png]]
+
+*** Second peeling :export:
+We then take =data1= as our former =data0= and we repeat the procedure. We do it with slight modifications: detection is done on a single recording site and a shorter filter length is used before detecting the events. Doing detection on a single site (here site 0) allows us to correct some drawbacks of our crude spike detection method. When we used it the first time we summed the filtered and rectified versions of the data before looking at peaks. This summation can lead to badly defined spike times when two neurons that are large on different recording sites, say site 0 and site 1 fire at nearly the same time. The summed event can then have a peak in between the two true peaks and our jitter correction cannot resolve that. We are therefore going to perform detection on the different sites. The jitter estimation and the subtraction are always going to be done on the 4 recording sites:
+
+#+NAME: sp1
+#+BEGIN_SRC python :results silent :session *Python*
+data_filtered = np.apply_along_axis(lambda x:
+                                    fftconvolve(x,np.array([1,1,1])/3.,
+                                                'same'),
+                                    1,data1)
+data_filtered = (data_filtered.transpose() /
+                 np.apply_along_axis(swp.mad,1,
+                                     data_filtered)).transpose()
+data_filtered[data_filtered > -3] = 0
+sp1 = swp.peak(-data_filtered[0,:])
+#+END_SRC
+
+We classify the events and obtain the new prediction and the new "data":
+
+#+NAME: round1-pred1-data2
+#+BEGIN_SRC python :results silent :session *Python*
+round1 = [swp.classify_and_align_evt(sp1[i],data1,centers)
+          for i in range(len(sp1))]
+pred1 = swp.predict_data(round1,centers,data1.shape[0],data1.shape[1])
+data2 = data1 - pred1
+#+END_SRC
+
+We can check how many events got unclassified on a total of src_python[:results pp :session *Python*]{len(sp1)} =583=:
+
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+len([x[1] for x in round1 if x[0] == '?'])
+#+END_SRC
+
+#+RESULTS:
+: 126
+
+We can compare the first peeling with the second one (Fig. \ref{fig:SecondPeeling}):
+
+#+BEGIN_SRC python :results silent :session *Python* 
+plt.plot(tt, data1[0,], color='black')
+plt.plot(tt, data2[0,], color='red',lw=0.7)
+plt.plot(tt, data1[1,]-20, color='black')
+plt.plot(tt, data2[1,]-20, color='red',lw=0.7)
+plt.plot(tt, data1[2,]-40, color='black')
+plt.plot(tt, data2[2,]-40, color='red',lw=0.7)
+plt.plot(tt, data1[3,]-60, color='black')
+plt.plot(tt, data2[3,]-60, color='red',lw=0.7)
+plt.xlabel('Time (s)')
+plt.xlim([2.45,2.55])
+#+END_SRC
+
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/SecondPeeling.png")
+plt.close()
+"img/SecondPeeling.png"
+#+END_SRC
+
+#+CAPTION: 100 ms of data. Black, first peeling; red, second peeling.
+#+NAME: fig:SecondPeeling
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/SecondPeeling.png]]
 
