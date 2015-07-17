@@ -36,7 +36,7 @@
 	"pdflatex -shell-escape -interaction nonstopmode -output-directory %o %f"))
 #+END_SRC
 
-* Introduction
+* Introduction :export:
 
 The purpose of this document is to expose in a comprehensive way how the spike sorting of a "large" data set can be performed with "simple" tools built around the =Python= language. The data were recorded from a locust /Schistocerca americana/ antennal lobe (the first olfactory relay, equivalent of the /olfactory bulb/ of vertebrates). A total of 1 hour and 40 minutes of spontaneous activity was recorded as as responses to 150 stimulation with citral. The set is publicly available on [[https://zenodo.org/record/19461?ln=en#.VaeBSzLLpRQ][zenodo]] (DOI: [[http://dx.doi.org/10.5281/zenodo.19461][10.5281/zenodo.19461]]). The recording setting is described in Pouzat, Mazor and Laurent (2002)[fn:PouzatMazorLaurent2002] and a picture of the recording situation can be seen of the third slide of Pouzat (2014)[fn:Pouzat2014]. The purpose of these long recordings was probing interactions between neurons and how they are modified by a stimulus.
 
@@ -46,7 +46,7 @@ I analyzed these data 14 years ago, meaning that I totally forgot I did it then.
 
 The following analysis was performed with the [[https://store.continuum.io/cshop/anaconda/][anaconda]] distribution of =Python 3=.
 
-* Getting the data
+* Getting the data :export:
 The data are stored in [[http://www.hdfgroup.org/HDF5/][HDF5]] format on the [[https://zenodo.org/][zenodo]] server. They are all contained in a file named =locust20010201.hdf5=. The data within this file have an hierarchical organization similar to the one of a file system (one of the main ideas of the HDF5 format).
 
 The data can be downloaded with =Python= as follows:
@@ -429,7 +429,7 @@ data = [hdf['Continuous_1']['trial_01'][name][...] for name in ch_names]
 
 *The data are saved in the HDF5 file as they came out of the A/D converter on 16 bit integers*. They were band-pass filtered between 300 and 5 kHz and sampled at 15 kHz. 
 
-* Loading modules and code
+* Loading modules and code :export:
 
 We are going to use the usual scientific python modules and we set the interactive mode for =pyplot=:
 
@@ -454,7 +454,7 @@ urlretrieve('https://github.com/christophe-pouzat/PouzatDetorakisEuroScipy2014/r
 import sorting_with_python as swp
 #+END_SRC
 
-* Model / Catalog Estimation
+* Model / Catalog Estimation :export:
 
 ** Preliminary analysis
 We are going to start our analysis by some "sanity checks" to make sure that nothing "weird" happened during the recording.
