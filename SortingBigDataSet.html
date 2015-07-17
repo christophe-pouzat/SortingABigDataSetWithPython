@@ -4,7 +4,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
 <title>Sorting a Big Data Set With Python</title>
-<!-- 2015-07-16 jeu. 23:23 -->
+<!-- 2015-07-17 ven. 12:38 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="generator" content="Org-mode" />
 <meta  name="author" content="Christophe Pouzat" />
@@ -227,6 +227,8 @@ for the JavaScript code in this tag.
 <ul>
 <li><a href="#sec-4-7-1">4.7.1. Cluster specific plots</a></li>
 <li><a href="#sec-4-7-2">4.7.2. Results inspection with <code>GGobi</code></a></li>
+<li><a href="#sec-4-7-3">4.7.3. Preliminary conclusion</a></li>
+<li><a href="#sec-4-7-4">4.7.4. Splitting cluster 1 in two</a></li>
 </ul>
 </li>
 </ul>
@@ -295,8 +297,8 @@ We then open the file in read mode and we print the content of the <code>LabBook
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="open-locust20010201.hdf5">f = h5py.File('locust20010201.hdf5','r')
-print(f.attrs['LabBook'])
+<pre class="src src-python" id="open-locust20010201.hdf5">hdf = h5py.File('locust20010201.hdf5','r')
+print(hdf.attrs['LabBook'])
 </pre>
 </div>
 
@@ -320,12 +322,13 @@ We can get the names of the different groups as follows:
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="print-group-names">for name in f:
+<pre class="src src-python" id="print-group-names">for name in hdf:
     print(name)
 </pre>
 </div>
 
 <pre class="example">
+
 Citral_1
 Citral_2
 Citral_3
@@ -341,7 +344,7 @@ We can get the names of the subgroups of group <code>Continuous_1</code> with (t
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="print-subgroup-of-Continuous_1-names">for name in f['Continuous_1']:
+<pre class="src src-python" id="print-subgroup-of-Continuous_1-names">for name in hdf['Continuous_1']:
     print(name)
 </pre>
 </div>
@@ -352,7 +355,7 @@ The content of the <code>log_file_content</code> attribute of group <code>Contin
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="print-log_file_content-attribute-of-Continuous_1">print(f['Continuous_1'].attrs['log_file_content'])
+<pre class="src src-python" id="print-log_file_content-attribute-of-Continuous_1">print(hdf['Continuous_1'].attrs['log_file_content'])
 </pre>
 </div>
 </div>
@@ -367,7 +370,7 @@ We are going to follow the tutorial of <a href="https://github.com/christophe-po
 <div class="org-src-container">
 
 <pre class="src src-python" id="assign-data-list">ch_names = ['ch09','ch11','ch13','ch16']
-data = [f['Continuous_1']['trial_01'][name][...] for name in ch_names]
+data = [hdf['Continuous_1']['trial_01'][name][...] for name in ch_names]
 </pre>
 </div>
 </div>
@@ -675,7 +678,7 @@ data_median
 <h3 id="sec-4-4"><span class="section-number-3">4.4</span> Detect valleys</h3>
 <div class="outline-text-3" id="text-4-4">
 <p>
-We are going to filter the data slightly using a "box" filter of length 5. That is, the data points of the original trace are going to be replaced by the average of themselves with their four nearest neighbors. We will then scale the filtered traces such that the <code>MAD</code> is one on each recording sites and keep only the parts of the signal which bellow -4:
+We are going to filter the data slightly using a "box" filter of length 5. That is, the data points of the original trace are going to be replaced by the average of themselves with their four nearest neighbors. We will then scale the filtered traces such that the <code>MAD</code> is one on each recording sites and keep only the parts of the signal which bellow -3 (I started with -4 but after doing the interactive detection check as described bellow, I decided to reduce the threshold):
 </p>
 
 <div class="org-src-container">
@@ -687,7 +690,7 @@ data_filtered = apply(lambda x:
                       1,np.array(data))
 data_filtered = (data_filtered.transpose() / \
                  apply(swp.mad,1,data_filtered)).transpose()
-data_filtered[data_filtered &gt; -4] = 0
+data_filtered[data_filtered &gt; -3] = 0
 </pre>
 </div>
 
@@ -698,7 +701,7 @@ We can see the difference between the <i>raw</i> trace and the <i>filtered and r
 <div class="org-src-container">
 
 <pre class="src src-python">plt.plot(tt, data[0],color='black')
-plt.axhline(y=-4,color="blue",linestyle="dashed")
+plt.axhline(y=-3,color="blue",linestyle="dashed")
 plt.plot(tt, data_filtered[0,],color='red')
 plt.xlim([0,0.2])
 plt.ylim([-20,6])
@@ -724,7 +727,7 @@ We now use function <code>peak</code> on the sum of the rows of our filtered and
 </div>
 
 <p>
-Giving <code>1060</code> spikes, a mean inter-event interval of <code>407.0</code> sampling points, a standard deviation of <code>391.0</code> sampling points, a smallest inter-event interval of <code>17</code> sampling points and a largest of <code>2991</code> sampling points.
+Giving <code>2325</code> spikes, a mean inter-event interval of <code>186.0</code> sampling points, a standard deviation of <code>187.0</code> sampling points, a smallest inter-event interval of <code>16</code> sampling points and a largest of <code>2145</code> sampling points.
 </p>
 </div>
 
@@ -800,11 +803,11 @@ plt.plot(evts_mad, color='blue', lw=2)
 <div id="fig:check-MAD-on-long-cuts" class="figure">
 <p><img src="img/check-MAD-on-long-cuts.png" alt="check-MAD-on-long-cuts.png" />
 </p>
-<p><span class="figure-number">Figure 5:</span> Robust estimates of the central event (black) and of the sample's dispersion around the central event (red) obtained with "long" (100 sampling points) cuts. We see clearly that the dispersion is back to noise level 15 points before the peak and 30 points after the peak. We also see that <code>data[3]</code> brings very little information.</p>
+<p><span class="figure-number">Figure 5:</span> Robust estimates of the central event (black) and of the sample's dispersion around the central event (red) obtained with "long" (100 sampling points) cuts. We see clearly that the dispersion is back to noise level 10 points before the peak and 30 points after the peak. We also see that <code>data[3]</code> brings very little information.</p>
 </div>
 
 <p>
-Fig. \ref{fig:check-MAD-on-long-cuts} clearly shows that starting the cuts 15 points before the peak and ending them 30 points after should fulfill our goals. We also see that the central event slightly outlasts the window where the <code>MAD</code> is larger than 1 and that <code>data[3]</code> brings very little information.
+Fig. \ref{fig:check-MAD-on-long-cuts} clearly shows that starting the cuts 10 points before the peak and ending them 30 points after should fulfill our goals. We also see that the central event slightly outlasts the window where the <code>MAD</code> is larger than 1 and that <code>data[3]</code> brings very little information.
 </p>
 </div>
 
@@ -817,7 +820,7 @@ Once we are satisfied with our spike detection, at least in a provisory way, and
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="evts">evts = swp.mk_events(sp0,np.array(data),14,30)
+<pre class="src src-python" id="evts">evts = swp.mk_events(sp0,np.array(data),9,30)
 </pre>
 </div>
 
@@ -860,7 +863,7 @@ We cut noise events with a rather large safety factor:
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="noise">noise = swp.mk_noise(sp0,np.array(data),14,30,safety_factor=2.5,size=2000)
+<pre class="src src-python" id="noise">noise = swp.mk_noise(sp0,np.array(data),10,30,safety_factor=2.5,size=2000)
 </pre>
 </div>
 
@@ -908,17 +911,17 @@ In order to eliminate the most obvious superpositions we are going to use a rath
 </div>
 
 <p>
-We then apply our new function to our sample using a threshold of 6 (set by trial and error starting from 8):
+We then apply our new function to our sample using a threshold of 9 (after a try with 8):
 </p>
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="goodEvts">goodEvts = good_evts_fct(evts,6)
+<pre class="src src-python" id="goodEvts">goodEvts = good_evts_fct(evts,9)
 </pre>
 </div>
 
 <p>
-Out of <code>1060</code> events we get <code>1051</code> "good" ones. As usual, the first 200 good ones can be visualized with:
+Out of <code>2325</code> events we get <code>2314</code> "good" ones. As usual, the first 200 good ones can be visualized with:
 </p>
 
 <div class="org-src-container">
@@ -953,7 +956,7 @@ We see that these events are not superpositions and we will work with the whole 
 <h4 id="sec-4-6-1"><span class="section-number-4">4.6.1</span> Principal Component Analysis (PCA)</h4>
 <div class="outline-text-4" id="text-4-6-1">
 <p>
-Our events are living right now in an 180 dimensional space (our cuts are 45 sampling points long and we are working with 4 recording sites simultaneously). It turns out that it hard for most humans to perceive structures in such spaces. It also hard, not to say impossible with a realistic sample size, to estimate probability densities (which is what model based clustering algorithms are actually doing) in such spaces, unless one is ready to make strong assumptions about these densities. It is therefore usually a good practice to try to reduce the dimension of the <a href="http://en.wikipedia.org/wiki/Sample_space">sample space</a> used to represent the data. We are going to that with <a href="http://en.wikipedia.org/wiki/Principal_component_analysis">principal component analysis</a> (<code>PCA</code>), using it on our "good" events. 
+Our events are living right now in an 160 dimensional space (our cuts are 40 sampling points long and we are working with 4 recording sites simultaneously). It turns out that it hard for most humans to perceive structures in such spaces. It also hard, not to say impossible with a realistic sample size, to estimate probability densities (which is what model based clustering algorithms are actually doing) in such spaces, unless one is ready to make strong assumptions about these densities. It is therefore usually a good practice to try to reduce the dimension of the <a href="http://en.wikipedia.org/wiki/Sample_space">sample space</a> used to represent the data. We are going to that with <a href="http://en.wikipedia.org/wiki/Principal_component_analysis">principal component analysis</a> (<code>PCA</code>), using it on our "good" events. 
 </p>
 
 <div class="org-src-container">
@@ -979,7 +982,7 @@ With this "back to the roots" approach, <code>u</code> should be an orthonormal 
 
 <div class="org-src-container">
 
-<pre class="src src-python">evt_idx = range(180)
+<pre class="src src-python">evt_idx = range(160)
 evts_good_mean = np.mean(evts,0)
 for i in range(4):
     plt.subplot(2,2,i+1)
@@ -1057,10 +1060,10 @@ The best way to discern structures in "high dimensional" data is to dynamically 
 <div class="org-src-container">
 
 <pre class="src src-python" id="ToGGobi1">import csv
-f = open('evts.csv','w')
-w = csv.writer(f)
+g = open('evts.csv','w')
+w = csv.writer(g)
 w.writerows(np.dot(evts,u[:,:6]))
-f.close()
+g.close()
 </pre>
 </div>
 
@@ -1097,8 +1100,9 @@ The following terse procedure should allow the reader to get going with <code>GG
 <li>Adjust the speed of the rotation in order to see things properly.
 </li>
 </ul>
+
 <p>
-We easily discern 7 rather well separated clusters. Meaning that an automatic clustering with 10 clusters on the first 3 principal components should do the job.
+We easily discern 7 rather well separated clusters. Meaning that an automatic clustering with 7 clusters on the first 3 or 4 principal components should do the job.
 </p>
 </div>
 </div>
@@ -1108,7 +1112,7 @@ We easily discern 7 rather well separated clusters. Meaning that an automatic cl
 <h3 id="sec-4-7"><span class="section-number-3">4.7</span> Clustering with K-Means</h3>
 <div class="outline-text-3" id="text-4-7">
 <p>
-Since our dynamic visualization shows 7 well separated clusters in 3 dimension, a simple <a href="http://en.wikipedia.org/wiki/K-means_clustering">k-means</a> should do the job. We are using here the <a href="http://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html#sklearn.cluster.KMeans">KMeans</a> class of <a href="http://scikit-learn.org/stable/index.html">scikit-learn</a>: 
+Since our dynamic visualization shows 7 well separated clusters in 3 dimensions, a simple <a href="http://en.wikipedia.org/wiki/K-means_clustering">k-means</a> is worth trying (even if some clusters look a bit "elongated"). We are using here the <a href="http://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html#sklearn.cluster.KMeans">KMeans</a> class of <a href="http://scikit-learn.org/stable/index.html">scikit-learn</a>: 
 </p>
 
 <div class="org-src-container">
@@ -1171,7 +1175,7 @@ plt.ylim([-20,15])
 </div>
 
 <p>
-Looking at the last 3 clusters we get Fig. \ref{fig:events-clusters5to9} with:
+Here the second cluster seems to be made of two units. Looking at the last 3 clusters we get Fig. \ref{fig:events-clusters5to9} with:
 </p>
 
 <div class="org-src-container">
@@ -1194,6 +1198,10 @@ plt.ylim([-20,15])
 </p>
 <p><span class="figure-number">Figure 11:</span> Last 3 clusters. Cluster 4 at the top, cluster 6 at the bottom. Red, cluster specific central / median event. Blue, cluster specific <code>MAD</code>. Notice the change in ordinate scale compared to the previous figure.</p>
 </div>
+
+<p>
+The top (cluster 4) and bottom (cluster 6) clusters look similar.
+</p>
 </div>
 </div>
 
@@ -1206,12 +1214,12 @@ We start by checking our clustering quality with <code>GGobi</code>. To this end
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="ToGGobi2">f = open('evts_sorted.csv','w')
-w = csv.writer(f)
+<pre class="src src-python" id="ToGGobi2">g = open('evts_sorted.csv','w')
+w = csv.writer(g)
 w.writerows(np.concatenate((np.dot(evts,u[:,:6]),
                             np.array([c7b]).T),
                             axis=1))
-f.close()
+g.close()
 </pre>
 </div>
 
@@ -1232,6 +1240,111 @@ An again succinct description of how to do the dynamical visual check is:
 <li>Select <code>View</code> -&gt; <code>Rotation</code> like before and see your result. 
 </li>
 </ul>
+
+<p>
+We see on this dynamic display that clusters 4 and 6 do form a continuum. 
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-4-7-3" class="outline-4">
+<h4 id="sec-4-7-3"><span class="section-number-4">4.7.3</span> Preliminary conclusion</h4>
+<div class="outline-text-4" id="text-4-7-3">
+<p>
+At this stage it seems reasonable to split cluster 1 in two and to fuse clusters 4 and 6. 
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-4-7-4" class="outline-4">
+<h4 id="sec-4-7-4"><span class="section-number-4">4.7.4</span> Splitting cluster 1 in two</h4>
+<div class="outline-text-4" id="text-4-7-4">
+<div class="org-src-container">
+
+<pre class="src src-python" id="KMEANS-on-cluster-1">km2 = KMeans(n_clusters=2, init='k-means++', n_init=100, max_iter=100)
+km2.fit(np.dot(evts[np.array(c7b) == 1,:],u[:,0:3]))
+c2 = km2.fit_predict(np.dot(evts[np.array(c7b) == 1,:],u[:,0:3]))
+cluster_median2 = list([(i,
+                         np.apply_along_axis(np.median,0,
+                                             evts[np.array(c7b) == 1,:][c2 == i,:]))
+                                             for i in range(2)
+                        if sum(c2 == i) &gt; 0])
+cluster_size2 = list([np.sum(np.abs(x[1])) for x in cluster_median2])
+new_order2 = list(reversed(np.argsort(cluster_size2)))
+new_order_reverse2 = sorted(range(len(new_order2)), key=new_order.__getitem__)
+c2b = [new_order_reverse2[i] for i in c2]
+</pre>
+</div>
+
+<p>
+A look at the results:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python">plt.subplot(211)
+swp.plot_events(evts[np.array(c7b) == 1,:][np.array(c2b) == 0,:])
+plt.ylim([-20,15])
+plt.subplot(212)
+swp.plot_events(evts[np.array(c7b) == 1,:][np.array(c2b) == 1,:])
+plt.ylim([-20,15])
+</pre>
+</div>
+
+
+<div id="fig:events-cluster1split" class="figure">
+<p><img src="img/events-cluster1split.png" alt="events-cluster1split.png" />
+</p>
+<p><span class="figure-number">Figure 12:</span> The results of splitting cluster 1 in two clusters with kmeans.</p>
+</div>
+
+<p>
+This is not what was wanted, the events with an early large positive values on the second site are still mixed. Let's try with a gaussian mixture:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python">from sklearn import mixture
+g2 = mixture.GMM(n_components=2,covariance_type='full',n_init=10)
+g2.fit(np.dot(evts[np.array(c7b) == 1,:],u[:,0:3]))
+cB = g2.predict(np.dot(evts[np.array(c7b) == 1,:],u[:,0:3]))
+cluster_medianB = list([(i,
+                         np.apply_along_axis(np.median,0,
+                                             evts[np.array(c7b) == 1,:][cB == i,:]))
+                                             for i in range(2)
+                        if sum(cB == i) &gt; 0])
+cluster_sizeB = list([np.sum(np.abs(x[1])) for x in cluster_medianB])
+new_orderB = list(reversed(np.argsort(cluster_sizeB)))
+new_order_reverseB = sorted(range(len(new_orderB)), key=new_order.__getitem__)
+cBb = [new_order_reverseB[i] for i in cB]
+</pre>
+</div>
+
+<p>
+A look at the results:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python">plt.subplot(211)
+swp.plot_events(evts[np.array(c7b) == 1,:][np.array(cBb) == 0,:])
+plt.ylim([-20,15])
+plt.subplot(212)
+swp.plot_events(evts[np.array(c7b) == 1,:][np.array(cBb) == 1,:])
+plt.ylim([-20,15])
+</pre>
+</div>
+
+
+<div id="fig:events-cluster1splitGMM" class="figure">
+<p><img src="img/events-cluster1splitGMM.png" alt="events-cluster1splitGMM.png" />
+</p>
+<p><span class="figure-number">Figure 13:</span> The results of splitting cluster 1 in two clusters with a GMM.</p>
+</div>
+
+<p>
+This does what we wanted. That also suggests that redoing our initial clustering with a GMM is worth trying (this was tried, not shown, but did not work out better).
+</p>
 </div>
 </div>
 </div>
@@ -1257,7 +1370,7 @@ Christophe Pouzat. (2015). PouzatDetorakisEuroScipy2014: Complet avec référenc
 </div></div>
 <div id="postamble" class="status">
 <p class="author">Author: Christophe Pouzat</p>
-<p class="date">Created: 2015-07-16 jeu. 23:23</p>
+<p class="date">Created: 2015-07-17 ven. 12:38</p>
 <p class="creator">Emacs 24.5.1 (Org mode 8.2.10)</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>

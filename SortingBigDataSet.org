@@ -102,18 +102,15 @@ for name in hdf:
 #+END_SRC
 
 #+RESULTS: print-group-names
-#+begin_example
-
-
-Citral_1
-Citral_2
-Citral_3
-Continuous_1
-Continuous_2
-Continuous_3
-Continuous_4
-
-#+end_example
+: 
+: 
+: Citral_1
+: Citral_2
+: Citral_3
+: Continuous_1
+: Continuous_2
+: Continuous_3
+: Continuous_4
 
 We can get the names of the subgroups of group =Continuous_1= with (the result is not shown because it's long):
 
@@ -217,7 +214,6 @@ trial_87
 trial_88
 trial_89
 trial_90
-
 #+end_example
 
 The content of the =log_file_content= attribute of group =Continuous_1= is visualized with (again not shown because it's too long):
@@ -607,7 +603,7 @@ data = list(map(lambda x: (x-np.median(x))/swp.mad(x), data))
 #+END_SRC
 
 ** Detect valleys
-We are going to filter the data slightly using a "box" filter of length 5. That is, the data points of the original trace are going to be replaced by the average of themselves with their four nearest neighbors. We will then scale the filtered traces such that the =MAD= is one on each recording sites and keep only the parts of the signal which bellow -4:
+We are going to filter the data slightly using a "box" filter of length 5. That is, the data points of the original trace are going to be replaced by the average of themselves with their four nearest neighbors. We will then scale the filtered traces such that the =MAD= is one on each recording sites and keep only the parts of the signal which bellow -3 (I started with -4 but after doing the interactive detection check as described bellow, I decided to reduce the threshold):
 
 #+NAME: filter-data
 #+BEGIN_SRC python :results silent :session *Python*
@@ -618,14 +614,14 @@ data_filtered = apply(lambda x:
                       1,np.array(data))
 data_filtered = (data_filtered.transpose() / \
                  apply(swp.mad,1,data_filtered)).transpose()
-data_filtered[data_filtered > -4] = 0
+data_filtered[data_filtered > -3] = 0
 #+END_SRC
 
 We can see the difference between the /raw/ trace and the /filtered and rectified/ one (Fig. \ref{fig:compare-raw-and-filtered-data}) on which spikes are going to be detected with:
 
 #+BEGIN_SRC python :exports code :results silent :session *Python*
 plt.plot(tt, data[0],color='black')
-plt.axhline(y=-4,color="blue",linestyle="dashed")
+plt.axhline(y=-3,color="blue",linestyle="dashed")
 plt.plot(tt, data_filtered[0,],color='red')
 plt.xlim([0,0.2])
 plt.ylim([-20,6])
@@ -652,7 +648,7 @@ We now use function =peak= on the sum of the rows of our filtered and rectified 
 sp0 = swp.peak(-data_filtered.sum(0))
 #+END_SRC
 
-Giving src_python[:results pp :session *Python*]{len(sp0)} =1060= spikes, a mean inter-event interval of src_python[:results pp :session *Python*]{round(np.mean(np.diff(sp0)))} =407.0= sampling points, a standard deviation of src_python[:results pp :session *Python*]{round(np.std(np.diff(sp0)))} =391.0= sampling points, a smallest inter-event interval of src_python[:results pp :session *Python*]{np.min(np.diff(sp0))} =17= sampling points and a largest of src_python[:results pp :session *Python*]{np.max(np.diff(sp0))} =2991= sampling points.
+Giving src_python[:results pp :session *Python*]{len(sp0)} =2325= spikes, a mean inter-event interval of src_python[:results pp :session *Python*]{round(np.mean(np.diff(sp0)))} =186.0= sampling points, a standard deviation of src_python[:results pp :session *Python*]{round(np.std(np.diff(sp0)))} =187.0= sampling points, a smallest inter-event interval of src_python[:results pp :session *Python*]{np.min(np.diff(sp0))} =16= sampling points and a largest of src_python[:results pp :session *Python*]{np.max(np.diff(sp0))} =2145= sampling points.
 
 *** Interactive spike detection check
 We can then check the detection quality with:
@@ -710,20 +706,20 @@ plt.close()
 'img/check-MAD-on-long-cuts.png'  
 #+END_SRC
 
-#+CAPTION: Robust estimates of the central event (black) and of the sample's dispersion around the central event (red) obtained with "long" (100 sampling points) cuts. We see clearly that the dispersion is back to noise level 15 points before the peak and 30 points after the peak. We also see that =data[3]= brings very little information.
+#+CAPTION: Robust estimates of the central event (black) and of the sample's dispersion around the central event (red) obtained with "long" (100 sampling points) cuts. We see clearly that the dispersion is back to noise level 10 points before the peak and 30 points after the peak. We also see that =data[3]= brings very little information.
 #+NAME: fig:check-MAD-on-long-cuts
 #+ATTR_LaTeX: :width 0.8\textwidth
 #+RESULTS: check-MAD-on-long-cuts
 [[file:img/check-MAD-on-long-cuts.png]]
 
-Fig. \ref{fig:check-MAD-on-long-cuts} clearly shows that starting the cuts 15 points before the peak and ending them 30 points after should fulfill our goals. We also see that the central event slightly outlasts the window where the =MAD= is larger than 1 and that =data[3]= brings very little information.
+Fig. \ref{fig:check-MAD-on-long-cuts} clearly shows that starting the cuts 10 points before the peak and ending them 30 points after should fulfill our goals. We also see that the central event slightly outlasts the window where the =MAD= is larger than 1 and that =data[3]= brings very little information.
 
 *** Events
 Once we are satisfied with our spike detection, at least in a provisory way, and that we have decided on the length of our cuts, we proceed by making =cuts= around the detected events. :
 
 #+NAME: evts
 #+BEGIN_SRC python :exports code :results silent :session *Python*
-evts = swp.mk_events(sp0,np.array(data),14,30)
+evts = swp.mk_events(sp0,np.array(data),9,30)
 #+END_SRC
 
 We can visualize the first 200 events with:
@@ -755,7 +751,7 @@ We cut noise events with a rather large safety factor:
 
 #+NAME: noise
 #+BEGIN_SRC python :exports code :results silent :session *Python*
-noise = swp.mk_noise(sp0,np.array(data),14,30,safety_factor=2.5,size=2000)
+noise = swp.mk_noise(sp0,np.array(data),10,30,safety_factor=2.5,size=2000)
 #+END_SRC
 
 Calling (results not shown):
@@ -787,14 +783,14 @@ def good_evts_fct(samp, thr=3):
 
 #+END_SRC
 
-We then apply our new function to our sample using a threshold of 6 (set by trial and error starting from 8):
+We then apply our new function to our sample using a threshold of 9 (after a try with 8):
 
 #+NAME: goodEvts
 #+BEGIN_SRC python :exports code :results silent :session *Python*
-goodEvts = good_evts_fct(evts,6)
+goodEvts = good_evts_fct(evts,9)
 #+END_SRC
 
-Out of src_python[:results pp :session *Python*]{len(goodEvts)} =1060= events we get src_python[:results pp :session *Python*]{sum(goodEvts)} =1051= "good" ones. As usual, the first 200 good ones can be visualized with:
+Out of src_python[:results pp :session *Python*]{len(goodEvts)} =2325= events we get src_python[:results pp :session *Python*]{sum(goodEvts)} =2314= "good" ones. As usual, the first 200 good ones can be visualized with:
 
 #+BEGIN_SRC python :eval no-export :results silent :session *Python*
 swp.plot_events(evts[goodEvts,:][:200,:]) 
@@ -813,7 +809,7 @@ We see that these events are not superpositions and we will work with the whole 
 ** Dimension reduction
 
 *** Principal Component Analysis (PCA)
-Our events are living right now in an 180 dimensional space (our cuts are 45 sampling points long and we are working with 4 recording sites simultaneously). It turns out that it hard for most humans to perceive structures in such spaces. It also hard, not to say impossible with a realistic sample size, to estimate probability densities (which is what model based clustering algorithms are actually doing) in such spaces, unless one is ready to make strong assumptions about these densities. It is therefore usually a good practice to try to reduce the dimension of the [[http://en.wikipedia.org/wiki/Sample_space][sample space]] used to represent the data. We are going to that with [[http://en.wikipedia.org/wiki/Principal_component_analysis][principal component analysis]] (=PCA=), using it on our "good" events. 
+Our events are living right now in an 160 dimensional space (our cuts are 40 sampling points long and we are working with 4 recording sites simultaneously). It turns out that it hard for most humans to perceive structures in such spaces. It also hard, not to say impossible with a realistic sample size, to estimate probability densities (which is what model based clustering algorithms are actually doing) in such spaces, unless one is ready to make strong assumptions about these densities. It is therefore usually a good practice to try to reduce the dimension of the [[http://en.wikipedia.org/wiki/Sample_space][sample space]] used to represent the data. We are going to that with [[http://en.wikipedia.org/wiki/Principal_component_analysis][principal component analysis]] (=PCA=), using it on our "good" events. 
 
 #+NAME: PCA
 #+BEGIN_SRC python :exports code :results silent :session *Python*
@@ -828,7 +824,7 @@ With this "back to the roots" approach, =u= should be an orthonormal matrix whos
 =PCA= is a rather abstract procedure to most of its users, at least when they start using it. But one way to grasp what it does is to plot the =mean event= plus or minus, say five times, each principal components like:
 
 #+BEGIN_SRC python :session *Python*  :exports code :results silent :session *Python*
-evt_idx = range(180)
+evt_idx = range(160)
 evts_good_mean = np.mean(evts,0)
 for i in range(4):
     plt.subplot(2,2,i+1)
@@ -925,10 +921,11 @@ The following terse procedure should allow the reader to get going with =GGobi=:
  - Go back to the =Interaction= menu and select the first row to go back where you were at the start.
 + Select menu: =View= -> =Rotation=.
 + Adjust the speed of the rotation in order to see things properly.
-We easily discern 7 rather well separated clusters. Meaning that an automatic clustering with 10 clusters on the first 3 principal components should do the job.
+
+We easily discern 7 rather well separated clusters. Meaning that an automatic clustering with 7 clusters on the first 3 or 4 principal components should do the job.
 
 ** Clustering with K-Means
-Since our dynamic visualization shows 7 well separated clusters in 3 dimension, a simple [[http://en.wikipedia.org/wiki/K-means_clustering][k-means]] should do the job. We are using here the [[http://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html#sklearn.cluster.KMeans][KMeans]] class of [[http://scikit-learn.org/stable/index.html][scikit-learn]]: 
+Since our dynamic visualization shows 7 well separated clusters in 3 dimensions, a simple [[http://en.wikipedia.org/wiki/K-means_clustering][k-means]] is worth trying (even if some clusters look a bit "elongated"). We are using here the [[http://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html#sklearn.cluster.KMeans][KMeans]] class of [[http://scikit-learn.org/stable/index.html][scikit-learn]]: 
 
 #+NAME: KMEANS
 #+BEGIN_SRC python :results silent :session *Python*
@@ -983,7 +980,7 @@ plt.close()
 #+RESULTS:
 [[file:img/events-clusters0to3.png]]
 
-Looking at the last 3 clusters we get Fig. \ref{fig:events-clusters5to9} with:
+Here the second cluster seems to be made of two units. Looking at the last 3 clusters we get Fig. \ref{fig:events-clusters5to9} with:
 
 #+BEGIN_SRC python :results silent :session *Python*
 plt.subplot(311)
@@ -1009,6 +1006,8 @@ plt.close()
 #+RESULTS:
 [[file:img/events-clusters4to6.png]]
 
+The top (cluster 4) and bottom (cluster 6) clusters look similar.
+
 *** Results inspection with =GGobi=
 
 We start by checking our clustering quality with =GGobi=. To this end we export the data and the labels of each event:
@@ -1031,6 +1030,215 @@ An again succinct description of how to do the dynamical visual check is:
 + In menu: =Tools= -> =Automatic Brushing=, select =evtsEsorted.csv= tab and, within this tab, select variable =c10b=. Then click on =Apply=.
 + Select =View= -> =Rotation= like before and see your result. 
 
+We see on this dynamic display that clusters 4 and 6 do form a continuum. 
+
+*** Preliminary conclusion
+
+At this stage it seems reasonable to split cluster 1 in two and to fuse clusters 4 and 6. 
+
+*** Splitting cluster 1 in two
+
+#+NAME: KMEANS-on-cluster-1
+#+BEGIN_SRC python :results silent :session *Python*
+km2 = KMeans(n_clusters=2, init='k-means++', n_init=100, max_iter=100)
+km2.fit(np.dot(evts[np.array(c7b) == 1,:],u[:,0:3]))
+c2 = km2.fit_predict(np.dot(evts[np.array(c7b) == 1,:],u[:,0:3]))
+cluster_median2 = list([(i,
+                         np.apply_along_axis(np.median,0,
+                                             evts[np.array(c7b) == 1,:][c2 == i,:]))
+                                             for i in range(2)
+                        if sum(c2 == i) > 0])
+cluster_size2 = list([np.sum(np.abs(x[1])) for x in cluster_median2])
+new_order2 = list(reversed(np.argsort(cluster_size2)))
+new_order_reverse2 = sorted(range(len(new_order2)), key=new_order.__getitem__)
+c2b = [new_order_reverse2[i] for i in c2]
+#+END_SRC
+  
+A look at the results:
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.subplot(211)
+swp.plot_events(evts[np.array(c7b) == 1,:][np.array(c2b) == 0,:])
+plt.ylim([-20,15])
+plt.subplot(212)
+swp.plot_events(evts[np.array(c7b) == 1,:][np.array(c2b) == 1,:])
+plt.ylim([-20,15])
+#+END_SRC
+
+#+BEGIN_SRC python :session *Python* :exports results :results file :session *Python*
+plt.savefig('img/events-cluster1split.png')
+plt.close()
+'img/events-cluster1split.png'
+#+END_SRC
+
+#+CAPTION: The results of splitting cluster 1 in two clusters with kmeans.
+#+NAME: fig:events-cluster1split
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/events-cluster1split.png]]
+
+This is not what was wanted, the events with an early large positive values on the second site are still mixed. Let's try with a gaussian mixture:
+
+#+BEGIN_SRC python :results silent :session *Python*
+from sklearn import mixture
+g2 = mixture.GMM(n_components=2,covariance_type='full',n_init=10)
+g2.fit(np.dot(evts[np.array(c7b) == 1,:],u[:,0:3]))
+cB = g2.predict(np.dot(evts[np.array(c7b) == 1,:],u[:,0:3]))
+cluster_medianB = list([(i,
+                         np.apply_along_axis(np.median,0,
+                                             evts[np.array(c7b) == 1,:][cB == i,:]))
+                                             for i in range(2)
+                        if sum(cB == i) > 0])
+cluster_sizeB = list([np.sum(np.abs(x[1])) for x in cluster_medianB])
+new_orderB = list(reversed(np.argsort(cluster_sizeB)))
+new_order_reverseB = sorted(range(len(new_orderB)), key=new_order.__getitem__)
+cBb = [new_order_reverseB[i] for i in cB]
+#+END_SRC
+
+A look at the results:
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.subplot(211)
+swp.plot_events(evts[np.array(c7b) == 1,:][np.array(cBb) == 0,:])
+plt.ylim([-20,15])
+plt.subplot(212)
+swp.plot_events(evts[np.array(c7b) == 1,:][np.array(cBb) == 1,:])
+plt.ylim([-20,15])
+#+END_SRC
+
+#+BEGIN_SRC python :session *Python* :exports results :results file :session *Python*
+plt.savefig('img/events-cluster1splitGMM.png')
+plt.close()
+'img/events-cluster1splitGMM.png'
+#+END_SRC
+
+#+CAPTION: The results of splitting cluster 1 in two clusters with a GMM.
+#+NAME: fig:events-cluster1splitGMM
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/events-cluster1splitGMM.png]]
+
+This does what we wanted. That also suggests that redoing our initial clustering with a GMM is worth trying (this was tried, not shown, but did not work out better).
+
+** Clustering with a Gaussian Mixture Model (GMM) :noexport:
+
+#+NAME: GMM-clustering
+#+BEGIN_SRC python :results silent :session *Python*
+g7 = mixture.GMM(n_components=7,covariance_type='full',n_init=10)
+g7.fit(np.dot(evts,u[:,0:3]))
+c7B = g7.predict(np.dot(evts,u[:,0:3]))
+cluster_medianB = list([(i,
+                         np.apply_along_axis(np.median,0,
+                                             evts[c7B == i,:]))
+                                             for i in range(7)
+                        if sum(c7B == i) > 0])
+cluster_sizeB = list([np.sum(np.abs(x[1])) for x in cluster_medianB])
+new_orderB = list(reversed(np.argsort(cluster_sizeB)))
+new_order_reverseB = sorted(range(len(new_orderB)), key=new_orderB.__getitem__)
+c7Bb = [new_order_reverseB[i] for i in c7B]
+#+END_SRC
+ 
+*** Cluster specific plots
+Looking at the first 4 clusters we get Fig. \ref{fig:events-clusters0to3GMM} with:
+
+#+BEGIN_SRC python :results silent :session *Python* 
+plt.subplot(411)
+swp.plot_events(evts[np.array(c7Bb) == 0,:])
+plt.ylim([-20,15])
+plt.subplot(412)
+swp.plot_events(evts[np.array(c7Bb) == 1,:])
+plt.ylim([-20,15])
+plt.subplot(413)
+swp.plot_events(evts[np.array(c7Bb) == 2,:])
+plt.ylim([-20,15])
+plt.subplot(414)
+swp.plot_events(evts[np.array(c7Bb) == 3,:])
+plt.ylim([-20,15])
+#+END_SRC
+
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig('img/events-clusters0to3GMM.png')
+plt.close()
+'img/events-clusters0to3GMM.png'
+#+END_SRC
+
+#+CAPTION: First 4 clusters obtained with a GMM. Cluster 0 at the top, cluster 4 at the bottom. Red, cluster specific central / median event. Blue, cluster specific =MAD=. 
+#+NAME: fig:events-clusters0to3GMM
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/events-clusters0to3GMM.png]]
+
+Looking at the last 3 clusters we get Fig. \ref{fig:events-clusters4to6GMM} with:
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.subplot(311)
+swp.plot_events(evts[np.array(c7Bb) == 4,:])
+plt.ylim([-20,15])
+plt.subplot(312)
+swp.plot_events(evts[np.array(c7Bb) == 5,:])
+plt.ylim([-20,15])
+plt.subplot(313)
+swp.plot_events(evts[np.array(c7Bb) == 6,:])
+plt.ylim([-20,15])
+#+END_SRC
+
+#+BEGIN_SRC python :session *Python* :exports results :results file :session *Python*
+plt.savefig('img/events-clusters4to6GMM.png')
+plt.close()
+'img/events-clusters4to6GMM.png'
+#+END_SRC
+
+#+CAPTION: Last 3 clusters obtained with a GMM. Cluster 4 at the top, cluster 6 at the bottom. Red, cluster specific central / median event. Blue, cluster specific =MAD=. Notice the change in ordinate scale compared to the previous figure.
+#+NAME: fig:events-clusters4to6GMM
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/events-clusters4to6GMM.png]]
+
+#+NAME: GMM-clustering-8
+#+BEGIN_SRC python :results silent :session *Python*
+g8 = mixture.GMM(n_components=8,covariance_type='full',n_init=10)
+g8.fit(np.dot(evts,u[:,0:3]))
+c8 = g8.predict(np.dot(evts,u[:,0:3]))
+cluster_median8 = list([(i,
+                         np.apply_along_axis(np.median,0,
+                                             evts[c8 == i,:]))
+                                             for i in range(8)
+                        if sum(c8 == i) > 0])
+cluster_size8 = list([np.sum(np.abs(x[1])) for x in cluster_median8])
+new_order8 = list(reversed(np.argsort(cluster_size8)))
+new_order_reverse8 = sorted(range(len(new_order8)), key=new_order8.__getitem__)
+c8b = [new_order_reverse8[i] for i in c8]
+#+END_SRC
+
+#+BEGIN_SRC python :results silent :session *Python* 
+plt.subplot(411)
+swp.plot_events(evts[np.array(c8b) == 0,:])
+plt.ylim([-20,15])
+plt.subplot(412)
+swp.plot_events(evts[np.array(c8b) == 1,:])
+plt.ylim([-20,15])
+plt.subplot(413)
+swp.plot_events(evts[np.array(c8b) == 2,:])
+plt.ylim([-20,15])
+plt.subplot(414)
+swp.plot_events(evts[np.array(c8b) == 3,:])
+plt.ylim([-20,15])
+#+END_SRC
+
+#+BEGIN_SRC python :results silent :session *Python* 
+plt.subplot(411)
+swp.plot_events(evts[np.array(c8b) == 4,:])
+plt.ylim([-20,15])
+plt.subplot(412)
+swp.plot_events(evts[np.array(c8b) == 5,:])
+plt.ylim([-20,15])
+plt.subplot(413)
+swp.plot_events(evts[np.array(c8b) == 6,:])
+plt.ylim([-20,15])
+plt.subplot(414)
+swp.plot_events(evts[np.array(c8b) == 7,:])
+plt.ylim([-20,15])
+#+END_SRC
 
 [fn:PouzatMazorLaurent2002] C. Pouzat, O. Mazor and G. Laurent (2002) [[http://xtof.perso.math.cnrs.fr/pdf/Pouzat+:2002.pdf][Using noise signature to optimize spike-sorting and to assess neuronal classification quality.]] /Journal of Neuroscience Methods/ *122*: 43-57.
 [fn:Pouzat2014] Pouzat, Christophe. (2015). Peri-Stimulus Time Histograms Estimation Through Poisson Regression Without Generalized Linear Models. Zenodo. [[http://dx.doi.org/10.5281/zenodo.14660][10.5281/zenodo.14660]].
