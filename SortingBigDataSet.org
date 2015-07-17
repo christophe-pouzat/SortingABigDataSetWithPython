@@ -1605,3 +1605,17 @@ The number of spikes attributed to each neuron is:
 :  ('Cluster 2', 126)]
 
 Keep in mind that clusters 4 and 6 are very close to noise level and should not be considered for further analysis.
+
+* Clean up, etc :export:
+
+#+BEGIN_SRC python :session *Python*
+hdf.close()
+import shelve
+db = shelve.open("locust20010201_sorting.db",protocol=-1)
+db['data_mad'] = data_mad
+db['data_median'] = data_median
+db['centers'] = centers
+db['round_all'] = round_all
+db['spike_trains'] = spike_trains
+db.close()
+#+END_SRC
