@@ -4,7 +4,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
 <title>Sorting a Big Data Set With Python</title>
-<!-- 2015-07-17 ven. 15:27 -->
+<!-- 2015-07-17 ven. 16:05 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="generator" content="Org-mode" />
 <meta  name="author" content="Christophe Pouzat" />
@@ -190,8 +190,12 @@ for the JavaScript code in this tag.
 <ul>
 <li><a href="#sec-1-1-1">1.1.1. First peeling</a></li>
 <li><a href="#sec-1-1-2">1.1.2. Second peeling</a></li>
+<li><a href="#sec-1-1-3">1.1.3. Third peeling</a></li>
+<li><a href="#sec-1-1-4">1.1.4. Fourth peeling</a></li>
+<li><a href="#sec-1-1-5">1.1.5. General comparison</a></li>
 </ul>
 </li>
+<li><a href="#sec-1-2">1.2. Getting the spike trains</a></li>
 </ul>
 </li>
 </ul>
@@ -394,12 +398,249 @@ plt.xlim([2.45,2.55])
 </div>
 </div>
 </div>
+
+<div id="outline-container-sec-1-1-3" class="outline-4">
+<h4 id="sec-1-1-3"><span class="section-number-4">1.1.3</span> Third peeling</h4>
+<div class="outline-text-4" id="text-1-1-3">
+<p>
+We take <code>data2</code> as our former <code>data1</code> and we repeat the procedure detecting on channel 1:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="sp2">data_filtered = apply(lambda x:
+                      fftconvolve(x,np.array([1,1,1])/3.,'same'),
+                      1,data2)
+data_filtered = (data_filtered.transpose() / \
+                 apply(swp.mad,1,data_filtered)).transpose()
+data_filtered[data_filtered &gt; -3] = 0
+sp2 = swp.peak(-data_filtered[1,:])
+len(sp2)
+</pre>
+</div>
+
+<pre class="example">
+452
+</pre>
+
+<p>
+The classification follows with the prediction and the number of unclassified events:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="round2-pred2-data3">round2 = [swp.classify_and_align_evt(sp2[i],data2,centers) for i in range(len(sp2))]
+pred2 = swp.predict_data(round2,centers,data2.shape[0],data2.shape[1])
+data3 = data2 - pred2
+len([x[1] for x in round2 if x[0] == '?'])
+</pre>
+</div>
+
+<pre class="example">
+76
+</pre>
+
+<p>
+We can compare the second peeling with the third one (Fig. \ref{fig:ThirdPeeling}):
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python">plt.plot(tt, data2[0,], color='black')
+plt.plot(tt, data3[0,], color='red',lw=0.7)
+plt.plot(tt, data2[1,]-20, color='black')
+plt.plot(tt, data3[1,]-20, color='red',lw=0.7)
+plt.plot(tt, data2[2,]-40, color='black')
+plt.plot(tt, data3[2,]-40, color='red',lw=0.7)
+plt.plot(tt, data2[3,]-60, color='black')
+plt.plot(tt, data3[3,]-60, color='red',lw=0.7)
+plt.xlabel('Time (s)')
+plt.xlim([16.15,16.25])
+</pre>
+</div>
+
+
+<div id="fig:ThirdPeeling" class="figure">
+<p><img src="img/ThirdPeeling.png" alt="ThirdPeeling.png" />
+</p>
+<p><span class="figure-number">Figure 3:</span> 100 ms of data. Black, second peeling; red, third peeling.</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-1-4" class="outline-4">
+<h4 id="sec-1-1-4"><span class="section-number-4">1.1.4</span> Fourth peeling</h4>
+<div class="outline-text-4" id="text-1-1-4">
+<p>
+We take <code>data3</code> as our former <code>data2</code> and we repeat the procedure detecting on channel 2:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="sp3">data_filtered = apply(lambda x:
+                      fftconvolve(x,np.array([1,1,1])/3.,'same'),
+                      1,data3)
+data_filtered = (data_filtered.transpose() / \
+                 apply(swp.mad,1,data_filtered)).transpose()
+data_filtered[data_filtered &gt; -3] = 0
+sp3 = swp.peak(-data_filtered[2,:])
+len(sp3)
+</pre>
+</div>
+
+<pre class="example">
+556
+</pre>
+
+<p>
+The classification follows with the prediction and the number of unclassified events:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="round3-pred3-data4">round3 = [swp.classify_and_align_evt(sp3[i],data3,centers) for i in range(len(sp3))]
+pred3 = swp.predict_data(round3,centers,data3.shape[0],data3.shape[1])
+data4 = data3 - pred3
+len([x[1] for x in round3 if x[0] == '?'])
+</pre>
+</div>
+
+<pre class="example">
+52
+</pre>
+
+<p>
+We can compare the third peeling with the fourth one (Fig. \ref{fig:FourthPeeling}) looking at a different part of the data than on the previous figures:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python">plt.plot(tt, data3[0,], color='black')
+plt.plot(tt, data4[0,], color='red',lw=0.7)
+plt.plot(tt, data3[1,]-20, color='black')
+plt.plot(tt, data4[1,]-20, color='red',lw=0.7)
+plt.plot(tt, data3[2,]-40, color='black')
+plt.plot(tt, data4[2,]-40, color='red',lw=0.7)
+plt.plot(tt, data3[3,]-60, color='black')
+plt.plot(tt, data4[3,]-60, color='red',lw=0.7)
+plt.xlabel('Time (s)')
+plt.xlim([17.5,17.6])
+</pre>
+</div>
+
+
+<div id="fig:FourthPeeling" class="figure">
+<p><img src="img/FourthPeeling.png" alt="FourthPeeling.png" />
+</p>
+<p><span class="figure-number">Figure 4:</span> 100 ms of the locust data set (different time frame than on the previous plot). Black, third peeling; red, fourth peeling.</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-1-5" class="outline-4">
+<h4 id="sec-1-1-5"><span class="section-number-4">1.1.5</span> General comparison</h4>
+<div class="outline-text-4" id="text-1-1-5">
+<p>
+We can compare the raw data with the fourth peeling on the first second (Fig. \ref{fig:RawVSFourthPeeling}):
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python">plt.plot(tt, data0[0,], color='black')
+plt.plot(tt, data4[0,], color='red',lw=0.5)
+plt.plot(tt, data0[1,]-20, color='black')
+plt.plot(tt, data4[1,]-20, color='red',lw=0.5)
+plt.plot(tt, data0[2,]-40, color='black')
+plt.plot(tt, data4[2,]-40, color='red',lw=0.5)
+plt.plot(tt, data0[3,]-60, color='black')
+plt.plot(tt, data4[3,]-60, color='red',lw=0.5)
+plt.xlabel('Time (s)')
+plt.xlim([0,1])
+</pre>
+</div>
+
+
+<div id="fig:RawVSFourthPeeling" class="figure">
+<p><img src="img/RawVSFourthPeeling.png" alt="RawVSFourthPeeling.png" />
+</p>
+<p><span class="figure-number">Figure 5:</span> The first second of the locust data set. Black, raw data; red, fourth peeling.</p>
+</div>
+
+<p>
+We can also look at the remaining unclassified events; they don't look like any of our templates (Fig. \ref{fig:FourthPeelingRemainingBad}):
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python">bad_ones = [x[1] for x in round3 if x[0] == '?']
+r3BE = swp.mk_events(bad_ones, data3)
+swp.plot_events(r3BE)
+</pre>
+</div>
+
+
+<div id="fig:FourthPeelingRemainingBad" class="figure">
+<p><img src="img/FourthPeelingRemainingBad.png" alt="FourthPeelingRemainingBad.png" />
+</p>
+<p><span class="figure-number">Figure 6:</span> The 52 remaining bad events after the fourth peeling.</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-2" class="outline-3">
+<h3 id="sec-1-2"><span class="section-number-3">1.2</span> Getting the spike trains</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+Once we have decided to stop the peeling iterations we can extract our spike trains with (notice the syntax difference between <code>Python 3</code> and <code>Python 2</code>):
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="spike_trains">try:
+    round_all = round0.copy() # Python 3
+except AttributeError:
+    round_all = round0[:] # Python 2
+
+round_all.extend(round1)
+round_all.extend(round2)
+round_all.extend(round3)
+spike_trains = { n : np.sort([x[1] + x[2] for x in round_all
+                              if x[0] == n]) for n in list(centers)}
+</pre>
+</div>
+
+<p>
+The number of spikes attributed to each neuron is:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python">[(n,len(spike_trains[n])) for n in list(centers)]
+</pre>
+</div>
+
+<pre class="example">
+[('Cluster 3', 71),
+ ('Cluster 4', 978),
+ ('Cluster 7', 37),
+ ('Cluster 6', 1609),
+ ('Cluster 0', 75),
+ ('Cluster 5', 451),
+ ('Cluster 1', 259),
+ ('Cluster 2', 126)]
+</pre>
+
+<p>
+Keep in mind that clusters 4 and 6 are very close to noise level and should not be considered for further analysis.
+</p>
+</div>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Christophe Pouzat</p>
-<p class="date">Created: 2015-07-17 ven. 15:27</p>
+<p class="date">Created: 2015-07-17 ven. 16:05</p>
 <p class="creator">Emacs 24.5.1 (Org mode 8.2.10)</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>

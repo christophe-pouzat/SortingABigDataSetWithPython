@@ -1407,3 +1407,201 @@ plt.close()
 #+RESULTS:
 [[file:img/SecondPeeling.png]]
 
+*** Third peeling :export:
+We take =data2= as our former =data1= and we repeat the procedure detecting on channel 1:
+
+#+NAME: sp2
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+data_filtered = apply(lambda x:
+                      fftconvolve(x,np.array([1,1,1])/3.,'same'),
+                      1,data2)
+data_filtered = (data_filtered.transpose() / \
+                 apply(swp.mad,1,data_filtered)).transpose()
+data_filtered[data_filtered > -3] = 0
+sp2 = swp.peak(-data_filtered[1,:])
+len(sp2)
+#+END_SRC
+
+#+RESULTS: sp2
+: 452
+
+The classification follows with the prediction and the number of unclassified events:
+
+#+NAME: round2-pred2-data3
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+round2 = [swp.classify_and_align_evt(sp2[i],data2,centers) for i in range(len(sp2))]
+pred2 = swp.predict_data(round2,centers,data2.shape[0],data2.shape[1])
+data3 = data2 - pred2
+len([x[1] for x in round2 if x[0] == '?'])
+#+END_SRC
+
+#+RESULTS: round2-pred2-data3
+: 76
+
+We can compare the second peeling with the third one (Fig. \ref{fig:ThirdPeeling}):
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.plot(tt, data2[0,], color='black')
+plt.plot(tt, data3[0,], color='red',lw=0.7)
+plt.plot(tt, data2[1,]-20, color='black')
+plt.plot(tt, data3[1,]-20, color='red',lw=0.7)
+plt.plot(tt, data2[2,]-40, color='black')
+plt.plot(tt, data3[2,]-40, color='red',lw=0.7)
+plt.plot(tt, data2[3,]-60, color='black')
+plt.plot(tt, data3[3,]-60, color='red',lw=0.7)
+plt.xlabel('Time (s)')
+plt.xlim([16.15,16.25])
+#+END_SRC
+
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/ThirdPeeling.png")
+plt.close()
+'img/ThirdPeeling.png'
+#+END_SRC
+
+#+CAPTION: 100 ms of data. Black, second peeling; red, third peeling. 
+#+NAME: fig:ThirdPeeling
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/ThirdPeeling.png]]
+
+*** Fourth peeling :export:
+We take =data3= as our former =data2= and we repeat the procedure detecting on channel 2:
+
+#+NAME: sp3
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+data_filtered = apply(lambda x:
+                      fftconvolve(x,np.array([1,1,1])/3.,'same'),
+                      1,data3)
+data_filtered = (data_filtered.transpose() / \
+                 apply(swp.mad,1,data_filtered)).transpose()
+data_filtered[data_filtered > -3] = 0
+sp3 = swp.peak(-data_filtered[2,:])
+len(sp3)
+#+END_SRC
+
+#+RESULTS: sp3
+: 556
+
+The classification follows with the prediction and the number of unclassified events:
+
+#+NAME: round3-pred3-data4
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+round3 = [swp.classify_and_align_evt(sp3[i],data3,centers) for i in range(len(sp3))]
+pred3 = swp.predict_data(round3,centers,data3.shape[0],data3.shape[1])
+data4 = data3 - pred3
+len([x[1] for x in round3 if x[0] == '?'])
+#+END_SRC
+
+#+RESULTS: round3-pred3-data4
+: 52
+
+We can compare the third peeling with the fourth one (Fig. \ref{fig:FourthPeeling}) looking at a different part of the data than on the previous figures:
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.plot(tt, data3[0,], color='black')
+plt.plot(tt, data4[0,], color='red',lw=0.7)
+plt.plot(tt, data3[1,]-20, color='black')
+plt.plot(tt, data4[1,]-20, color='red',lw=0.7)
+plt.plot(tt, data3[2,]-40, color='black')
+plt.plot(tt, data4[2,]-40, color='red',lw=0.7)
+plt.plot(tt, data3[3,]-60, color='black')
+plt.plot(tt, data4[3,]-60, color='red',lw=0.7)
+plt.xlabel('Time (s)')
+plt.xlim([17.5,17.6])
+#+END_SRC
+
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/FourthPeeling.png")
+plt.close()
+"img/FourthPeeling.png"
+#+END_SRC
+
+#+CAPTION: 100 ms of the locust data set (different time frame than on the previous plot). Black, third peeling; red, fourth peeling. 
+#+NAME: fig:FourthPeeling
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/FourthPeeling.png]]
+
+*** General comparison :export:
+We can compare the raw data with the fourth peeling on the first second (Fig. \ref{fig:RawVSFourthPeeling}):
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.plot(tt, data0[0,], color='black')
+plt.plot(tt, data4[0,], color='red',lw=0.5)
+plt.plot(tt, data0[1,]-20, color='black')
+plt.plot(tt, data4[1,]-20, color='red',lw=0.5)
+plt.plot(tt, data0[2,]-40, color='black')
+plt.plot(tt, data4[2,]-40, color='red',lw=0.5)
+plt.plot(tt, data0[3,]-60, color='black')
+plt.plot(tt, data4[3,]-60, color='red',lw=0.5)
+plt.xlabel('Time (s)')
+plt.xlim([0,1])
+#+END_SRC
+
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/RawVSFourthPeeling.png")
+plt.close()
+"img/RawVSFourthPeeling.png"
+#+END_SRC
+
+#+CAPTION: The first second of the locust data set. Black, raw data; red, fourth peeling.
+#+NAME: fig:RawVSFourthPeeling
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/RawVSFourthPeeling.png]]
+
+We can also look at the remaining unclassified events; they don't look like any of our templates (Fig. \ref{fig:FourthPeelingRemainingBad}):
+
+#+BEGIN_SRC python :results silent :session *Python*
+bad_ones = [x[1] for x in round3 if x[0] == '?']
+r3BE = swp.mk_events(bad_ones, data3)
+swp.plot_events(r3BE)
+#+END_SRC
+
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/FourthPeelingRemainingBad.png")
+plt.close()
+"img/FourthPeelingRemainingBad.png"
+#+END_SRC
+
+#+CAPTION: The 52 remaining bad events after the fourth peeling.
+#+NAME: fig:FourthPeelingRemainingBad
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/FourthPeelingRemainingBad.png]]
+
+** Getting the spike trains :export:
+Once we have decided to stop the peeling iterations we can extract our spike trains with (notice the syntax difference between =Python 3= and =Python 2=):
+
+#+NAME: spike_trains
+#+BEGIN_SRC python :results silent :session *Python*
+try:
+    round_all = round0.copy() # Python 3
+except AttributeError:
+    round_all = round0[:] # Python 2
+
+round_all.extend(round1)
+round_all.extend(round2)
+round_all.extend(round3)
+spike_trains = { n : np.sort([x[1] + x[2] for x in round_all
+                              if x[0] == n]) for n in list(centers)}
+#+END_SRC
+
+The number of spikes attributed to each neuron is:
+
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+[(n,len(spike_trains[n])) for n in list(centers)]
+#+END_SRC
+
+#+RESULTS:
+: [('Cluster 3', 71),
+:  ('Cluster 4', 978),
+:  ('Cluster 7', 37),
+:  ('Cluster 6', 1609),
+:  ('Cluster 0', 75),
+:  ('Cluster 5', 451),
+:  ('Cluster 1', 259),
+:  ('Cluster 2', 126)]
+
+Keep in mind that clusters 4 and 6 are very close to noise level and should not be considered for further analysis.
