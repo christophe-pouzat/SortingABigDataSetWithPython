@@ -4,7 +4,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
 <title>Sorting a Big Data Set With Python</title>
-<!-- 2015-07-17 ven. 16:45 -->
+<!-- 2015-07-20 lun. 17:12 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="generator" content="Org-mode" />
 <meta  name="author" content="Christophe Pouzat" />
@@ -253,7 +253,7 @@ for the JavaScript code in this tag.
 <h2 id="sec-1"><span class="section-number-2">1</span> Introduction</h2>
 <div class="outline-text-2" id="text-1">
 <p>
-The purpose of this document is to expose in a comprehensive way how the spike sorting of a "large" data set can be performed with "simple" tools built around the <code>Python</code> language. The data were recorded from a locust <i>Schistocerca americana</i> antennal lobe (the first olfactory relay, equivalent of the <i>olfactory bulb</i> of vertebrates). A total of 1 hour and 40 minutes of spontaneous activity was recorded as as responses to 150 stimulation with citral. The set is publicly available on <a href="https://zenodo.org/record/19461?ln=en#.VaeBSzLLpRQ">zenodo</a> (DOI: <a href="http://dx.doi.org/10.5281/zenodo.19461">10.5281/zenodo.19461</a>). The recording setting is described in Pouzat, Mazor and Laurent (2002)<sup><a id="fnr.1" name="fnr.1" class="footref" href="#fn.1">1</a></sup> and a picture of the recording situation can be seen of the third slide of Pouzat (2014)<sup><a id="fnr.2" name="fnr.2" class="footref" href="#fn.2">2</a></sup>. The purpose of these long recordings was probing interactions between neurons and how they are modified by a stimulus.
+The purpose of this document is to expose in a comprehensive way how the spike sorting of a "large" data set can be performed with "simple" tools built around the <code>Python</code> language. The data were recorded from a locust <i>Schistocerca americana</i> antennal lobe (the first olfactory relay, equivalent of the <i>olfactory bulb</i> of vertebrates). A total of 1 hour and 40 minutes of spontaneous activity was recorded as well as responses to 150 stimulation with citral. The set is publicly available on <a href="https://zenodo.org/record/19461?ln=en#.VaeBSzLLpRQ">zenodo</a> (DOI: <a href="http://dx.doi.org/10.5281/zenodo.19461">10.5281/zenodo.19461</a>). The recording setting is described in Pouzat, Mazor and Laurent (2002)<sup><a id="fnr.1" name="fnr.1" class="footref" href="#fn.1">1</a></sup> and a picture of the recording situation can be seen of the third slide of Pouzat (2014)<sup><a id="fnr.2" name="fnr.2" class="footref" href="#fn.2">2</a></sup>. The purpose of these long recordings was probing interactions between neurons and how they are modified by a stimulus.
 </p>
 
 <p>
@@ -261,7 +261,7 @@ There is no claim that the analysis presented in the sequel is "The" way to anal
 </p>
 
 <p>
-I analyzed these data 14 years ago, meaning that I totally forgot I did it then. I'm won't look at my old notes and give next a faithful and therefore rather long record of how I go on analyzing this kind of data.   
+I analyzed these data 14 years ago, meaning that I totally forgot how I did it then. I'm won't look at my old notes and give next a faithful and therefore rather long record of how I go on analyzing this kind of data.   
 </p>
 
 <p>
@@ -509,7 +509,7 @@ np.array([mquantiles(x,prob=[0,0.25,0.5,0.75,1]) for x in data])
 </table>
 
 <p>
-We see that they have similar but not identical inter quartile ranges: 81, 73, 90, 71 as well as similar but not identical domains: 
+We see that they have similar but not identical inter quartile ranges: 81, 73, 90, 71 as well as similar (<b>for the first three</b>) but not identical domain "lengths": 
 </p>
 
 <div class="org-src-container">
@@ -539,6 +539,10 @@ We see that they have similar but not identical inter quartile ranges: 81, 73, 9
 </tr>
 </tbody>
 </table>
+
+<p>
+On the fourth channel, the relatively small difference between the inter quartile range (71) and the domain length (533) suggests that much fewer large spikes should be visible than on the other channels.
+</p>
 </div>
 </div>
 
@@ -620,7 +624,7 @@ The first channel is drawn as is, the second is offset downward by the sum of it
 </div>
 
 <p>
-It is also good to "zoom in" and look at the data with a finer time scale (Fig. \ref{fig:First200ms}) with:
+As already discussed, the spikes on the fourth channel (bottom trace) are really tiny. It is also good to "zoom in" and look at the data with a finer time scale (Fig. \ref{fig:First200ms}) with:
 </p>
 
 <div class="org-src-container">
@@ -690,7 +694,7 @@ data_median
 <h3 id="sec-4-4"><span class="section-number-3">4.4</span> Detect valleys</h3>
 <div class="outline-text-3" id="text-4-4">
 <p>
-We are going to filter the data slightly using a "box" filter of length 5. That is, the data points of the original trace are going to be replaced by the average of themselves with their four nearest neighbors. We will then scale the filtered traces such that the <code>MAD</code> is one on each recording sites and keep only the parts of the signal which bellow -3 (I started with -4 but after doing the interactive detection check as described bellow, I decided to reduce the threshold):
+We are going to filter the data slightly using a "box" filter of length 5. That is, the data points of the original trace are going to be replaced by the average of themselves with their four nearest neighbors. We will then scale the filtered traces such that the <code>MAD</code> is one on each recording sites and keep only the parts of the signal which bellow -3 (I started with -4 but after doing the interactive detection check as described bellow, I decided to reduce the absolute value of the threshold):
 </p>
 
 <div class="org-src-container">
@@ -815,7 +819,7 @@ plt.plot(evts_mad, color='blue', lw=2)
 <div id="fig:check-MAD-on-long-cuts" class="figure">
 <p><img src="img/check-MAD-on-long-cuts.png" alt="check-MAD-on-long-cuts.png" />
 </p>
-<p><span class="figure-number">Figure 5:</span> Robust estimates of the central event (black) and of the sample's dispersion around the central event (red) obtained with "long" (100 sampling points) cuts. We see clearly that the dispersion is back to noise level 10 points before the peak and 30 points after the peak. We also see that <code>data[3]</code> brings very little information.</p>
+<p><span class="figure-number">Figure 5:</span> Robust estimates of the central event (red) and of the sample's dispersion around the central event (blue) obtained with "long" (100 sampling points) cuts. We see clearly that the dispersion is back to noise level 10 points before the peak and 30 points after the peak. We also see that <code>data[3]</code> brings very little information (its MAD is essentially flat).</p>
 </div>
 
 <p>
@@ -880,7 +884,7 @@ We cut noise events with a rather large safety factor:
 </div>
 
 <p>
-Calling (results not shown):
+Calling (result not shown):
 </p>
 
 <div class="org-src-container">
@@ -1427,7 +1431,7 @@ Function <code>classify_and_align_evt</code> is used next. For each detected eve
 </div>
 
 <pre class="example">
-['Cluster 4', 41, -0.76918445702167082]
+['Cluster 4', 41, -0.76949494497587501]
 </pre>
 
 <p>
@@ -1453,7 +1457,7 @@ We can check how many events got unclassified on a total of <code>2325</code>:
 </div>
 
 <pre class="example">
-56
+55
 </pre>
 
 <p>
@@ -1535,7 +1539,7 @@ data2 = data1 - pred1
 </div>
 
 <p>
-We can check how many events got unclassified on a total of <code>583</code>:
+We can check how many events got unclassified on a total of <code>581</code>:
 </p>
 
 <div class="org-src-container">
@@ -1545,7 +1549,7 @@ We can check how many events got unclassified on a total of <code>583</code>:
 </div>
 
 <pre class="example">
-126
+122
 </pre>
 
 <p>
@@ -1580,41 +1584,90 @@ plt.xlim([2.45,2.55])
 <h4 id="sec-4-8-3"><span class="section-number-4">4.8.3</span> Third peeling</h4>
 <div class="outline-text-4" id="text-4-8-3">
 <p>
-We take <code>data2</code> as our former <code>data1</code> and we repeat the procedure detecting on channel 1:
+We take <code>data2</code> as our former <code>data1</code> and we repeat the procedure detecting on channel 1, but we want to do it in a more compact form and we write a dedicated function to do so:
 </p>
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="sp2">data_filtered = apply(lambda x:
-                      fftconvolve(x,np.array([1,1,1])/3.,'same'),
-                      1,data2)
-data_filtered = (data_filtered.transpose() / \
-                 apply(swp.mad,1,data_filtered)).transpose()
-data_filtered[data_filtered &gt; -3] = 0
-sp2 = swp.peak(-data_filtered[1,:])
-len(sp2)
+<pre class="src src-python" id="peel-definition">def peel(input_data,
+         chan4detection,
+         detection_filter_length = 3,
+         detection_threshold = -3,
+         centers_dictionary = centers):
+    """Detects events, sorts them and get residuals
+
+    Parameters
+    ----------
+    input_data: a data matrix. 
+    chan4detection: the channel(s) to use for detection. An integer if a single
+                    channel is o be used for detection or a list of integers if
+                    if several channels are to be used.
+    detection_filter_length: an odd integer the length of the box filter to use
+                             for detection.
+    detection_threshold: the detection threshold (multiple of the MAD); if positive, 
+                         peaks are detected, if negative, valleys are detected.
+    centers_dictionary: a dictionary of centers (see function mk_center_dictionary).
+
+    Returns
+    -------
+    A tuple with two elements: a list with the results of classify_and_align_evt 
+      applied to each detected event.
+                               a matrix with the new residuals.
+
+    Details
+    -------
+    The function prints out the number of detected events as well as the number of
+    spikes attributed to each unit of the dictionary and the number of unclassified
+    events while running.
+    """
+    nb_channels, recording_length  = input_data.shape
+    data_filtered = apply(lambda x:
+                          fftconvolve(x,np.ones(detection_filter_length)/float(detection_filter_length),'same'),
+                          1,input_data)
+    data_filtered = (data_filtered.transpose() / \
+                     apply(swp.mad,1,data_filtered)).transpose()
+    if detection_threshold &lt; 0:
+        data_filtered[data_filtered &gt; detection_threshold] = 0
+        if isinstance(chan4detection,int):
+            spike_pos = swp.peak(-data_filtered[chan4detection,:])
+        else:
+            spike_pos = swp.peak(-data_filtered[chan4detection,:].sum(0))
+    else:
+        data_filtered[data_filtered &lt; detection_threshold] = 0
+        if isinstance(chan4detection,int):
+            spike_pos = swp.peak(data_filtered[chan4detection,:])
+        else:
+            spike_pos = swp.peak(data_filtered[chan4detection,:].sum(0))
+    nb_spikes = len(spike_pos)
+    print("Number of detected events: "+str(nb_spikes))
+    classification = [swp.classify_and_align_evt(spike_pos[i],input_data,centers_dictionary) for i in range(nb_spikes)]
+    for i in range(len(centers_dictionary)):
+        nb_spikes_from_unit = len([x[1] for x in classification if x[0] == 'Cluster '+ str(i)])
+        print("    Number of spikes from unit "+str(i)+": "+str(nb_spikes_from_unit))
+    nb_unclassified = len([x[1] for x in classification if x[0] == '?'])
+    print("    Number of unclassified events: " + str(nb_unclassified))
+    pred = swp.predict_data(classification,centers_dictionary,nb_channels,recording_length)
+    return classification, input_data - pred
 </pre>
 </div>
-
-<pre class="example">
-452
-</pre>
-
-<p>
-The classification follows with the prediction and the number of unclassified events:
-</p>
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="round2-pred2-data3">round2 = [swp.classify_and_align_evt(sp2[i],data2,centers) for i in range(len(sp2))]
-pred2 = swp.predict_data(round2,centers,data2.shape[0],data2.shape[1])
-data3 = data2 - pred2
-len([x[1] for x in round2 if x[0] == '?'])
+<pre class="src src-python" id="round2-and-data3">round2, data3 = peel(data2,1,3,-3,centers)
 </pre>
 </div>
 
 <pre class="example">
-76
+Number of detected events: 454
+    Number of spikes from unit 0: 0
+    Number of spikes from unit 1: 7
+    Number of spikes from unit 2: 0
+    Number of spikes from unit 3: 1
+    Number of spikes from unit 4: 97
+    Number of spikes from unit 5: 0
+    Number of spikes from unit 6: 271
+    Number of spikes from unit 7: 2
+    Number of unclassified events: 76
 </pre>
 
 <p>
@@ -1654,36 +1707,21 @@ We take <code>data3</code> as our former <code>data2</code> and we repeat the pr
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="sp3">data_filtered = apply(lambda x:
-                      fftconvolve(x,np.array([1,1,1])/3.,'same'),
-                      1,data3)
-data_filtered = (data_filtered.transpose() / \
-                 apply(swp.mad,1,data_filtered)).transpose()
-data_filtered[data_filtered &gt; -3] = 0
-sp3 = swp.peak(-data_filtered[2,:])
-len(sp3)
+<pre class="src src-python" id="round3-and-data4">round3, data4 = peel(data3,2,3,-3,centers)
 </pre>
 </div>
 
 <pre class="example">
-556
-</pre>
-
-<p>
-The classification follows with the prediction and the number of unclassified events:
-</p>
-
-<div class="org-src-container">
-
-<pre class="src src-python" id="round3-pred3-data4">round3 = [swp.classify_and_align_evt(sp3[i],data3,centers) for i in range(len(sp3))]
-pred3 = swp.predict_data(round3,centers,data3.shape[0],data3.shape[1])
-data4 = data3 - pred3
-len([x[1] for x in round3 if x[0] == '?'])
-</pre>
-</div>
-
-<pre class="example">
-52
+Number of detected events: 564
+    Number of spikes from unit 0: 0
+    Number of spikes from unit 1: 0
+    Number of spikes from unit 2: 0
+    Number of spikes from unit 3: 1
+    Number of spikes from unit 4: 168
+    Number of spikes from unit 5: 6
+    Number of spikes from unit 6: 335
+    Number of spikes from unit 7: 0
+    Number of unclassified events: 54
 </pre>
 
 <p>
@@ -1854,7 +1892,7 @@ Christophe Pouzat. (2015). PouzatDetorakisEuroScipy2014: Complet avec référenc
 </div></div>
 <div id="postamble" class="status">
 <p class="author">Author: Christophe Pouzat</p>
-<p class="date">Created: 2015-07-17 ven. 16:45</p>
+<p class="date">Created: 2015-07-20 lun. 17:12</p>
 <p class="creator">Emacs 24.5.1 (Org mode 8.2.10)</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>

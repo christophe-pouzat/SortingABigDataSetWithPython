@@ -19,6 +19,12 @@
 #+LATEX_HEADER: \bibliography{SortingBigDataSet}
 #+PROPERTY: header-args:python:  :session *Python*
 
+#+NAME: emacs-set-up
+#+BEGIN_SRC emacs-lisp :results silent :exports none
+(setq py-shell-name "~/anaconda3/bin/python")
+(setq org-export-babel-evaluate nil)
+#+END_SRC
+
 #+NAME: org-latex-set-up
 #+BEGIN_SRC emacs-lisp :results silent :exports none
 (setq org-latex-listings 'minted)
@@ -38,11 +44,11 @@
 
 * Introduction :export:
 
-The purpose of this document is to expose in a comprehensive way how the spike sorting of a "large" data set can be performed with "simple" tools built around the =Python= language. The data were recorded from a locust /Schistocerca americana/ antennal lobe (the first olfactory relay, equivalent of the /olfactory bulb/ of vertebrates). A total of 1 hour and 40 minutes of spontaneous activity was recorded as as responses to 150 stimulation with citral. The set is publicly available on [[https://zenodo.org/record/19461?ln=en#.VaeBSzLLpRQ][zenodo]] (DOI: [[http://dx.doi.org/10.5281/zenodo.19461][10.5281/zenodo.19461]]). The recording setting is described in Pouzat, Mazor and Laurent (2002)[fn:PouzatMazorLaurent2002] and a picture of the recording situation can be seen of the third slide of Pouzat (2014)[fn:Pouzat2014]. The purpose of these long recordings was probing interactions between neurons and how they are modified by a stimulus.
+The purpose of this document is to expose in a comprehensive way how the spike sorting of a "large" data set can be performed with "simple" tools built around the =Python= language. The data were recorded from a locust /Schistocerca americana/ antennal lobe (the first olfactory relay, equivalent of the /olfactory bulb/ of vertebrates). A total of 1 hour and 40 minutes of spontaneous activity was recorded as well as responses to 150 stimulation with citral. The set is publicly available on [[https://zenodo.org/record/19461?ln=en#.VaeBSzLLpRQ][zenodo]] (DOI: [[http://dx.doi.org/10.5281/zenodo.19461][10.5281/zenodo.19461]]). The recording setting is described in Pouzat, Mazor and Laurent (2002)[fn:PouzatMazorLaurent2002] and a picture of the recording situation can be seen of the third slide of Pouzat (2014)[fn:Pouzat2014]. The purpose of these long recordings was probing interactions between neurons and how they are modified by a stimulus.
 
 There is no claim that the analysis presented in the sequel is "The" way to analyze these data; it is just one /working/ way. The motivation, as a referee, is to have an explicit example to show to authors who all too often tend to analyze their data /en bloc/. I'm advocating instead a piecemeal approach were a first stretch of data is initially used to build a model--that is, a catalog of waveform, one per neuron and per recording site--while template matching is applied to the subsequent recorded minutes using a simple trend tracking.
 
-I analyzed these data 14 years ago, meaning that I totally forgot I did it then. I'm won't look at my old notes and give next a faithful and therefore rather long record of how I go on analyzing this kind of data.   
+I analyzed these data 14 years ago, meaning that I totally forgot how I did it then. I'm won't look at my old notes and give next a faithful and therefore rather long record of how I go on analyzing this kind of data.   
 
 The following analysis was performed with the [[https://store.continuum.io/cshop/anaconda/][anaconda]] distribution of =Python 3=.
 
@@ -475,7 +481,7 @@ np.array([mquantiles(x,prob=[0,0.25,0.5,0.75,1]) for x in data])
 | 1128 | 2013 | 2059 | 2103 | 2451 |
 | 1767 | 2021 | 2057 | 2092 | 2300 |
 
-We see that they have similar but not identical inter quartile ranges: 81, 73, 90, 71 as well as similar but not identical domains: 
+We see that they have similar but not identical inter quartile ranges: 81, 73, 90, 71 as well as similar (*for the first three*) but not identical domain "lengths": 
 
 #+NAME: Continous_1-trial_1-domain
 #+BEGIN_SRC python :exports both :session *Python* 
@@ -484,6 +490,8 @@ We see that they have similar but not identical inter quartile ranges: 81, 73, 9
 
 #+RESULTS: Continous_1-trial_1-domain
 | 1476 | 1284 | 1323 | 533 |
+
+On the fourth channel, the relatively small difference between the inter quartile range (71) and the domain length (533) suggests that much fewer large spikes should be visible than on the other channels.
 
 *** Were the data normalized?
 We can check next if some processing like a division by the /standard deviation/ (SD) has been applied:
@@ -546,7 +554,7 @@ plt.savefig("img/WholeRawData.png")
 #+RESULTS: WholeRawData
 [[file:img/WholeRawData.png]]
 
-It is also good to "zoom in" and look at the data with a finer time scale (Fig. \ref{fig:First200ms}) with:
+As already discussed, the spikes on the fourth channel (bottom trace) are really tiny. It is also good to "zoom in" and look at the data with a finer time scale (Fig. \ref{fig:First200ms}) with:
 
 #+BEGIN_SRC python :results silent :session *Python* :exports none
 swp.plot_data_list(data,tt,1)
@@ -603,7 +611,7 @@ data = list(map(lambda x: (x-np.median(x))/swp.mad(x), data))
 #+END_SRC
 
 ** Detect valleys
-We are going to filter the data slightly using a "box" filter of length 5. That is, the data points of the original trace are going to be replaced by the average of themselves with their four nearest neighbors. We will then scale the filtered traces such that the =MAD= is one on each recording sites and keep only the parts of the signal which bellow -3 (I started with -4 but after doing the interactive detection check as described bellow, I decided to reduce the threshold):
+We are going to filter the data slightly using a "box" filter of length 5. That is, the data points of the original trace are going to be replaced by the average of themselves with their four nearest neighbors. We will then scale the filtered traces such that the =MAD= is one on each recording sites and keep only the parts of the signal which bellow -3 (I started with -4 but after doing the interactive detection check as described bellow, I decided to reduce the absolute value of the threshold):
 
 #+NAME: filter-data
 #+BEGIN_SRC python :results silent :session *Python*
@@ -706,7 +714,7 @@ plt.close()
 'img/check-MAD-on-long-cuts.png'  
 #+END_SRC
 
-#+CAPTION: Robust estimates of the central event (black) and of the sample's dispersion around the central event (red) obtained with "long" (100 sampling points) cuts. We see clearly that the dispersion is back to noise level 10 points before the peak and 30 points after the peak. We also see that =data[3]= brings very little information.
+#+CAPTION: Robust estimates of the central event (red) and of the sample's dispersion around the central event (blue) obtained with "long" (100 sampling points) cuts. We see clearly that the dispersion is back to noise level 10 points before the peak and 30 points after the peak. We also see that =data[3]= brings very little information (its MAD is essentially flat).
 #+NAME: fig:check-MAD-on-long-cuts
 #+ATTR_LaTeX: :width 0.8\textwidth
 #+RESULTS: check-MAD-on-long-cuts
@@ -754,7 +762,7 @@ We cut noise events with a rather large safety factor:
 noise = swp.mk_noise(sp0,np.array(data),10,30,safety_factor=2.5,size=2000)
 #+END_SRC
 
-Calling (results not shown):
+Calling (result not shown):
 
 #+BEGIN_SRC python :exports code :results silent :session *Python* :eval never
 swp.plot_events(noise,200)
@@ -1286,7 +1294,7 @@ swp.classify_and_align_evt(sp0[0],np.array(data),centers)
 #+END_SRC
 
 #+RESULTS:
-: ['Cluster 4', 41, -0.76918445702167082]
+: ['Cluster 4', 41, -0.76949494497587501]
 
 We can use the function on every detected event. A trick here is to store the matrix version of the data in order to avoid the conversion of the list of vectors (making the data of the different channels) into a matrix for each detected event:
 
@@ -1304,7 +1312,7 @@ len([x[1] for x in round0 if x[0] == '?'])
 #+END_SRC
 
 #+RESULTS:
-: 56
+: 55
 
 Using function =predict_data=, we create an ideal data trace given events' positions, events' origins and a clusters' catalog:
 
@@ -1371,14 +1379,14 @@ pred1 = swp.predict_data(round1,centers,data1.shape[0],data1.shape[1])
 data2 = data1 - pred1
 #+END_SRC
 
-We can check how many events got unclassified on a total of src_python[:results pp :session *Python*]{len(sp1)} =583=:
+We can check how many events got unclassified on a total of src_python[:results pp :session *Python*]{len(sp1)} =581=:
 
 #+BEGIN_SRC python :exports both :results pp :session *Python*
 len([x[1] for x in round1 if x[0] == '?'])
 #+END_SRC
 
 #+RESULTS:
-: 126
+: 122
 
 We can compare the first peeling with the second one (Fig. \ref{fig:SecondPeeling}):
 
@@ -1408,35 +1416,90 @@ plt.close()
 [[file:img/SecondPeeling.png]]
 
 *** Third peeling :export:
-We take =data2= as our former =data1= and we repeat the procedure detecting on channel 1:
+We take =data2= as our former =data1= and we repeat the procedure detecting on channel 1, but we want to do it in a more compact form and we write a dedicated function to do so:
 
-#+NAME: sp2
-#+BEGIN_SRC python :exports both :results pp :session *Python*
-data_filtered = apply(lambda x:
-                      fftconvolve(x,np.array([1,1,1])/3.,'same'),
-                      1,data2)
-data_filtered = (data_filtered.transpose() / \
-                 apply(swp.mad,1,data_filtered)).transpose()
-data_filtered[data_filtered > -3] = 0
-sp2 = swp.peak(-data_filtered[1,:])
-len(sp2)
+#+NAME: peel-definition
+#+BEGIN_SRC python :session *Python* :results silent
+def peel(input_data,
+         chan4detection,
+         detection_filter_length = 3,
+         detection_threshold = -3,
+         centers_dictionary = centers):
+    """Detects events, sorts them and get residuals
+
+    Parameters
+    ----------
+    input_data: a data matrix. 
+    chan4detection: the channel(s) to use for detection. An integer if a single
+                    channel is o be used for detection or a list of integers if
+                    if several channels are to be used.
+    detection_filter_length: an odd integer the length of the box filter to use
+                             for detection.
+    detection_threshold: the detection threshold (multiple of the MAD); if positive, 
+                         peaks are detected, if negative, valleys are detected.
+    centers_dictionary: a dictionary of centers (see function mk_center_dictionary).
+
+    Returns
+    -------
+    A tuple with two elements: a list with the results of classify_and_align_evt 
+      applied to each detected event.
+                               a matrix with the new residuals.
+
+    Details
+    -------
+    The function prints out the number of detected events as well as the number of
+    spikes attributed to each unit of the dictionary and the number of unclassified
+    events while running.
+    """
+    nb_channels, recording_length  = input_data.shape
+    data_filtered = apply(lambda x:
+                          fftconvolve(x,np.ones(detection_filter_length)/float(detection_filter_length),'same'),
+                          1,input_data)
+    data_filtered = (data_filtered.transpose() / \
+                     apply(swp.mad,1,data_filtered)).transpose()
+    if detection_threshold < 0:
+        data_filtered[data_filtered > detection_threshold] = 0
+        if isinstance(chan4detection,int):
+            spike_pos = swp.peak(-data_filtered[chan4detection,:])
+        else:
+            spike_pos = swp.peak(-data_filtered[chan4detection,:].sum(0))
+    else:
+        data_filtered[data_filtered < detection_threshold] = 0
+        if isinstance(chan4detection,int):
+            spike_pos = swp.peak(data_filtered[chan4detection,:])
+        else:
+            spike_pos = swp.peak(data_filtered[chan4detection,:].sum(0))
+    nb_spikes = len(spike_pos)
+    print("Number of detected events: "+str(nb_spikes))
+    classification = [swp.classify_and_align_evt(spike_pos[i],input_data,centers_dictionary) for i in range(nb_spikes)]
+    for i in range(len(centers_dictionary)):
+        nb_spikes_from_unit = len([x[1] for x in classification if x[0] == 'Cluster '+ str(i)])
+        print("    Number of spikes from unit "+str(i)+": "+str(nb_spikes_from_unit))
+    nb_unclassified = len([x[1] for x in classification if x[0] == '?'])
+    print("    Number of unclassified events: " + str(nb_unclassified))
+    pred = swp.predict_data(classification,centers_dictionary,nb_channels,recording_length)
+    return classification, input_data - pred
+
 #+END_SRC
 
-#+RESULTS: sp2
-: 452
-
-The classification follows with the prediction and the number of unclassified events:
-
-#+NAME: round2-pred2-data3
-#+BEGIN_SRC python :exports both :results pp :session *Python*
-round2 = [swp.classify_and_align_evt(sp2[i],data2,centers) for i in range(len(sp2))]
-pred2 = swp.predict_data(round2,centers,data2.shape[0],data2.shape[1])
-data3 = data2 - pred2
-len([x[1] for x in round2 if x[0] == '?'])
+#+NAME: round2-and-data3
+#+BEGIN_SRC python :exports both :results output :session *Python*
+round2, data3 = peel(data2,1,3,-3,centers)
 #+END_SRC
 
-#+RESULTS: round2-pred2-data3
-: 76
+#+RESULTS: round2-and-data3
+#+begin_example
+Number of detected events: 454
+    Number of spikes from unit 0: 0
+    Number of spikes from unit 1: 7
+    Number of spikes from unit 2: 0
+    Number of spikes from unit 3: 1
+    Number of spikes from unit 4: 97
+    Number of spikes from unit 5: 0
+    Number of spikes from unit 6: 271
+    Number of spikes from unit 7: 2
+    Number of unclassified events: 76
+#+end_example
 
 We can compare the second peeling with the third one (Fig. \ref{fig:ThirdPeeling}):
 
@@ -1468,33 +1531,24 @@ plt.close()
 *** Fourth peeling :export:
 We take =data3= as our former =data2= and we repeat the procedure detecting on channel 2:
 
-#+NAME: sp3
-#+BEGIN_SRC python :exports both :results pp :session *Python*
-data_filtered = apply(lambda x:
-                      fftconvolve(x,np.array([1,1,1])/3.,'same'),
-                      1,data3)
-data_filtered = (data_filtered.transpose() / \
-                 apply(swp.mad,1,data_filtered)).transpose()
-data_filtered[data_filtered > -3] = 0
-sp3 = swp.peak(-data_filtered[2,:])
-len(sp3)
+#+NAME: round3-and-data4
+#+BEGIN_SRC python :exports both :results output :session *Python*
+round3, data4 = peel(data3,2,3,-3,centers)
 #+END_SRC
 
-#+RESULTS: sp3
-: 556
-
-The classification follows with the prediction and the number of unclassified events:
-
-#+NAME: round3-pred3-data4
-#+BEGIN_SRC python :exports both :results pp :session *Python*
-round3 = [swp.classify_and_align_evt(sp3[i],data3,centers) for i in range(len(sp3))]
-pred3 = swp.predict_data(round3,centers,data3.shape[0],data3.shape[1])
-data4 = data3 - pred3
-len([x[1] for x in round3 if x[0] == '?'])
-#+END_SRC
-
-#+RESULTS: round3-pred3-data4
-: 52
+#+RESULTS: round3-and-data4
+#+begin_example
+Number of detected events: 564
+    Number of spikes from unit 0: 0
+    Number of spikes from unit 1: 0
+    Number of spikes from unit 2: 0
+    Number of spikes from unit 3: 1
+    Number of spikes from unit 4: 168
+    Number of spikes from unit 5: 6
+    Number of spikes from unit 6: 335
+    Number of spikes from unit 7: 0
+    Number of unclassified events: 54
+#+end_example
 
 We can compare the third peeling with the fourth one (Fig. \ref{fig:FourthPeeling}) looking at a different part of the data than on the previous figures:
 
