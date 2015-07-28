@@ -4,7 +4,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
 <title>Sorting a Big Data Set With Python</title>
-<!-- 2015-07-20 lun. 17:12 -->
+<!-- 2015-07-28 mar. 17:31 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="generator" content="Org-mode" />
 <meta  name="author" content="Christophe Pouzat" />
@@ -253,7 +253,7 @@ for the JavaScript code in this tag.
 <h2 id="sec-1"><span class="section-number-2">1</span> Introduction</h2>
 <div class="outline-text-2" id="text-1">
 <p>
-The purpose of this document is to expose in a comprehensive way how the spike sorting of a "large" data set can be performed with "simple" tools built around the <code>Python</code> language. The data were recorded from a locust <i>Schistocerca americana</i> antennal lobe (the first olfactory relay, equivalent of the <i>olfactory bulb</i> of vertebrates). A total of 1 hour and 40 minutes of spontaneous activity was recorded as well as responses to 150 stimulation with citral. The set is publicly available on <a href="https://zenodo.org/record/19461?ln=en#.VaeBSzLLpRQ">zenodo</a> (DOI: <a href="http://dx.doi.org/10.5281/zenodo.19461">10.5281/zenodo.19461</a>). The recording setting is described in Pouzat, Mazor and Laurent (2002)<sup><a id="fnr.1" name="fnr.1" class="footref" href="#fn.1">1</a></sup> and a picture of the recording situation can be seen of the third slide of Pouzat (2014)<sup><a id="fnr.2" name="fnr.2" class="footref" href="#fn.2">2</a></sup>. The purpose of these long recordings was probing interactions between neurons and how they are modified by a stimulus.
+The purpose of this document is to expose in a comprehensive way how the spike sorting of a "large" data set can be performed with "simple" tools built around the <code>Python</code> language. The data were recorded from a locust <i>Schistocerca americana</i> antennal lobe (the first olfactory relay, equivalent of the <i>olfactory bulb</i> of vertebrates). A total of 1 hour and 40 minutes of spontaneous activity was recorded as well as responses to 150 stimulation with citral. The set is publicly available on <a href="https://zenodo.org/record/21589">zenodo</a> (DOI: <a href="http://dx.doi.org/10.5281/zenodo.21589">10.5281/zenodo.21589</a>). The recording setting is described in Pouzat, Mazor and Laurent (2002)<sup><a id="fnr.1" name="fnr.1" class="footref" href="#fn.1">1</a></sup> and a picture of the recording situation can be seen of the third slide of Pouzat (2014)<sup><a id="fnr.2" name="fnr.2" class="footref" href="#fn.2">2</a></sup>. The purpose of these long recordings was probing interactions between neurons and how they are modified by a stimulus.
 </p>
 
 <p>
@@ -288,7 +288,7 @@ The data can be downloaded with <code>Python</code> as follows:
 except ImportError:
     from urllib import urlretrieve # Python 2
     
-urlretrieve('https://zenodo.org/record/19461/files/locust20010201.hdf5',\
+urlretrieve('https://zenodo.org/record/21589/files/locust20010201.hdf5',\
             'locust20010201.hdf5')
 </pre>
 </div>
@@ -1198,13 +1198,13 @@ Here the second cluster seems to be made of two units. Looking at the last 3 clu
 
 <pre class="src src-python">plt.subplot(311)
 swp.plot_events(evts[np.array(c7b) == 4,:])
-plt.ylim([-20,15])
+plt.ylim([-10,5])
 plt.subplot(312)
 swp.plot_events(evts[np.array(c7b) == 5,:])
-plt.ylim([-20,15])
+plt.ylim([-10,5])
 plt.subplot(313)
 swp.plot_events(evts[np.array(c7b) == 6,:])
-plt.ylim([-20,15])
+plt.ylim([-10,5])
 </pre>
 </div>
 
@@ -1831,19 +1831,19 @@ The number of spikes attributed to each neuron is:
 
 <div class="org-src-container">
 
-<pre class="src src-python">[(n,len(spike_trains[n])) for n in list(centers)]
+<pre class="src src-python">[(n,len(spike_trains[n])) for n in ['Cluster '+str(i) for i in range(8)]]
 </pre>
 </div>
 
 <pre class="example">
-[('Cluster 3', 71),
- ('Cluster 4', 978),
- ('Cluster 7', 37),
- ('Cluster 6', 1609),
- ('Cluster 0', 75),
- ('Cluster 5', 451),
+[('Cluster 0', 75),
  ('Cluster 1', 259),
- ('Cluster 2', 126)]
+ ('Cluster 2', 126),
+ ('Cluster 3', 71),
+ ('Cluster 4', 982),
+ ('Cluster 5', 452),
+ ('Cluster 6', 1615),
+ ('Cluster 7', 37)]
 </pre>
 
 <p>
@@ -1892,7 +1892,7 @@ Christophe Pouzat. (2015). PouzatDetorakisEuroScipy2014: Complet avec référenc
 </div></div>
 <div id="postamble" class="status">
 <p class="author">Author: Christophe Pouzat</p>
-<p class="date">Created: 2015-07-20 lun. 17:12</p>
+<p class="date">Created: 2015-07-28 mar. 17:31</p>
 <p class="creator">Emacs 24.5.1 (Org mode 8.2.10)</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>

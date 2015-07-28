@@ -44,7 +44,7 @@
 
 * Introduction :export:
 
-The purpose of this document is to expose in a comprehensive way how the spike sorting of a "large" data set can be performed with "simple" tools built around the =Python= language. The data were recorded from a locust /Schistocerca americana/ antennal lobe (the first olfactory relay, equivalent of the /olfactory bulb/ of vertebrates). A total of 1 hour and 40 minutes of spontaneous activity was recorded as well as responses to 150 stimulation with citral. The set is publicly available on [[https://zenodo.org/record/19461?ln=en#.VaeBSzLLpRQ][zenodo]] (DOI: [[http://dx.doi.org/10.5281/zenodo.19461][10.5281/zenodo.19461]]). The recording setting is described in Pouzat, Mazor and Laurent (2002)[fn:PouzatMazorLaurent2002] and a picture of the recording situation can be seen of the third slide of Pouzat (2014)[fn:Pouzat2014]. The purpose of these long recordings was probing interactions between neurons and how they are modified by a stimulus.
+The purpose of this document is to expose in a comprehensive way how the spike sorting of a "large" data set can be performed with "simple" tools built around the =Python= language. The data were recorded from a locust /Schistocerca americana/ antennal lobe (the first olfactory relay, equivalent of the /olfactory bulb/ of vertebrates). A total of 1 hour and 40 minutes of spontaneous activity was recorded as well as responses to 150 stimulation with citral. The set is publicly available on [[https://zenodo.org/record/21589][zenodo]] (DOI: [[http://dx.doi.org/10.5281/zenodo.21589][10.5281/zenodo.21589]]). The recording setting is described in Pouzat, Mazor and Laurent (2002)[fn:PouzatMazorLaurent2002] and a picture of the recording situation can be seen of the third slide of Pouzat (2014)[fn:Pouzat2014]. The purpose of these long recordings was probing interactions between neurons and how they are modified by a stimulus.
 
 There is no claim that the analysis presented in the sequel is "The" way to analyze these data; it is just one /working/ way. The motivation, as a referee, is to have an explicit example to show to authors who all too often tend to analyze their data /en bloc/. I'm advocating instead a piecemeal approach were a first stretch of data is initially used to build a model--that is, a catalog of waveform, one per neuron and per recording site--while template matching is applied to the subsequent recorded minutes using a simple trend tracking.
 
@@ -64,7 +64,7 @@ try:
 except ImportError:
     from urllib import urlretrieve # Python 2
     
-urlretrieve('https://zenodo.org/record/19461/files/locust20010201.hdf5',\
+urlretrieve('https://zenodo.org/record/21589/files/locust20010201.hdf5',\
             'locust20010201.hdf5')
 #+END_SRC
 
@@ -993,13 +993,13 @@ Here the second cluster seems to be made of two units. Looking at the last 3 clu
 #+BEGIN_SRC python :results silent :session *Python*
 plt.subplot(311)
 swp.plot_events(evts[np.array(c7b) == 4,:])
-plt.ylim([-20,15])
+plt.ylim([-10,5])
 plt.subplot(312)
 swp.plot_events(evts[np.array(c7b) == 5,:])
-plt.ylim([-20,15])
+plt.ylim([-10,5])
 plt.subplot(313)
 swp.plot_events(evts[np.array(c7b) == 6,:])
-plt.ylim([-20,15])
+plt.ylim([-10,5])
 #+END_SRC
 
 #+BEGIN_SRC python :session *Python* :exports results :results file :session *Python*
@@ -1645,18 +1645,18 @@ spike_trains = { n : np.sort([x[1] + x[2] for x in round_all
 The number of spikes attributed to each neuron is:
 
 #+BEGIN_SRC python :exports both :results pp :session *Python*
-[(n,len(spike_trains[n])) for n in list(centers)]
+[(n,len(spike_trains[n])) for n in ['Cluster '+str(i) for i in range(8)]]
 #+END_SRC
 
 #+RESULTS:
-: [('Cluster 3', 71),
-:  ('Cluster 4', 978),
-:  ('Cluster 7', 37),
-:  ('Cluster 6', 1609),
-:  ('Cluster 0', 75),
-:  ('Cluster 5', 451),
+: [('Cluster 0', 75),
 :  ('Cluster 1', 259),
-:  ('Cluster 2', 126)]
+:  ('Cluster 2', 126),
+:  ('Cluster 3', 71),
+:  ('Cluster 4', 982),
+:  ('Cluster 5', 452),
+:  ('Cluster 6', 1615),
+:  ('Cluster 7', 37)]
 
 Keep in mind that clusters 4 and 6 are very close to noise level and should not be considered for further analysis.
 
