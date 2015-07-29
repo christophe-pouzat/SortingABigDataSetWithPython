@@ -1294,7 +1294,7 @@ swp.classify_and_align_evt(sp0[0],np.array(data),centers)
 #+END_SRC
 
 #+RESULTS:
-: ['Cluster 4', 41, -0.76949494497587501]
+: ['Cluster 4', 41, -0.76918445702167082]
 
 We can use the function on every detected event. A trick here is to store the matrix version of the data in order to avoid the conversion of the list of vectors (making the data of the different channels) into a matrix for each detected event:
 
@@ -1312,7 +1312,7 @@ len([x[1] for x in round0 if x[0] == '?'])
 #+END_SRC
 
 #+RESULTS:
-: 55
+: 56
 
 Using function =predict_data=, we create an ideal data trace given events' positions, events' origins and a clusters' catalog:
 
@@ -1386,7 +1386,7 @@ len([x[1] for x in round1 if x[0] == '?'])
 #+END_SRC
 
 #+RESULTS:
-: 122
+: 126
 
 We can compare the first peeling with the second one (Fig. \ref{fig:SecondPeeling}):
 
@@ -1489,14 +1489,14 @@ round2, data3 = peel(data2,1,3,-3,centers)
 
 #+RESULTS: round2-and-data3
 #+begin_example
-Number of detected events: 454
+Number of detected events: 452
     Number of spikes from unit 0: 0
     Number of spikes from unit 1: 7
     Number of spikes from unit 2: 0
     Number of spikes from unit 3: 1
-    Number of spikes from unit 4: 97
+    Number of spikes from unit 4: 96
     Number of spikes from unit 5: 0
-    Number of spikes from unit 6: 271
+    Number of spikes from unit 6: 270
     Number of spikes from unit 7: 2
     Number of unclassified events: 76
 #+end_example
@@ -1538,16 +1538,16 @@ round3, data4 = peel(data3,2,3,-3,centers)
 
 #+RESULTS: round3-and-data4
 #+begin_example
-Number of detected events: 564
+Number of detected events: 556
     Number of spikes from unit 0: 0
     Number of spikes from unit 1: 0
     Number of spikes from unit 2: 0
     Number of spikes from unit 3: 1
-    Number of spikes from unit 4: 168
+    Number of spikes from unit 4: 164
     Number of spikes from unit 5: 6
-    Number of spikes from unit 6: 335
+    Number of spikes from unit 6: 333
     Number of spikes from unit 7: 0
-    Number of unclassified events: 54
+    Number of unclassified events: 52
 #+end_example
 
 We can compare the third peeling with the fourth one (Fig. \ref{fig:FourthPeeling}) looking at a different part of the data than on the previous figures:
@@ -1653,13 +1653,79 @@ The number of spikes attributed to each neuron is:
 :  ('Cluster 1', 259),
 :  ('Cluster 2', 126),
 :  ('Cluster 3', 71),
-:  ('Cluster 4', 982),
-:  ('Cluster 5', 452),
-:  ('Cluster 6', 1615),
+:  ('Cluster 4', 978),
+:  ('Cluster 5', 451),
+:  ('Cluster 6', 1609),
 :  ('Cluster 7', 37)]
 
 Keep in mind that clusters 4 and 6 are very close to noise level and should not be considered for further analysis.
 
+* Defining classes and methods for a systematic analysis of the remaining of the experiment
+
+At that stage we want to take the next epoch of 29 seconds of spontaneous activity and, using our "templates catalog", =centers=, recursively detect spikes, subtract the closest catalog member, until there is "nothing left". To track potential electrode drifts resulting in clusters waveform changes, we want, after the classification of each epoch, to recompute the median of each cluster as long as the latter as enough associated events or make a compromise between the former median and the new one when there aren't enough associated events. Do do all that, we don't want to type as many command lines as we just did; that's why we are going to introduce some classes and associated methods.
+
+** MultiChannelData Class
+
+We start with a =Class= that we call =MultiChannelData=. In general we think of using it to store and display multi-channel data (like data from a tetrode), but we will design it to work with single channel data as well.
+
+#+NAME: MultiChannelData-Class-defintion
+#+BEGIN_SRC python :session *Python* :results silent
+class MultiChannelData:
+    """Mutli- or Single- channel data."""
+    import numpy as np
+    def __init__(self, data, start=0, sampling_rate=15000):
+        """Create a new MultiChannelData instance.
+
+        data           an array (nb_channels x nb_samples) or a list containing the data
+        start          the time (in seconds) at which acquisition started 
+        sampling_rate  the sampling_rate used during the acquisition (in Hz)
+        """
+        if not isinstance(data,(list,np.ndarray)):
+            raise TypeError('data must be a list or a numpy ndarray')
+        elif sampling_rate <= 0:
+            raise ValueError('sampling_rate must be positive')
+        if isinstance(data,list):
+            self._data = np.array(data)
+        else:
+            self._data = data
+        self._start = start
+        self._sampling_rate = sampling_rate
+        self._nb_channels, self._length = self._data.shape
+    def duration(self):
+        """The recording duration in seconds."""
+        return self._length/self._sampling_rate
+    def __len__(self):
+        """Return number of samples."""
+        return self._length
+    def nb_channels(self):
+        """Return number of channels."""
+        return self._nb_channels
+    def start_time(self):
+        """The recording start time in seconds."""
+        return self._start
+    def get_data(self):
+        """Extract the actual data."""
+        return self._data
+    def sample2time(self,sample_point):
+        """Converts sample point to time in seconds."""
+        if not 0 <= sample_point <= self._length:
+            raise ValueError('sample_point must non negative  positive and smaller than ' + str(self._length))
+        return sample_point/self._sampling_rate + self._start
+    def time2sample(self,time):
+        """Converts time in second to sample point."""
+        if not self._start <= time < self._start+duration(self):
+            raise ValueError('time must be larger than ' + str(start) + ' and  smaller than ' + str(self._start+duration(self)))
+        return round((time-self._start)/self._sampling_rate)
+    def quantiles(self, prob=[0,0.25,0.5,0.75,1]):
+        """Return quantiles of each channel.
+
+        prob see mquantiles in scipy.stats.mstats (default gives 5 numbers summary)
+        """
+        from scipy.stats.mstats import mquantiles
+        return mquantiles(self._data,prob, axis=1)
+
+#+END_SRC
+ 
 * Clean up, etc :export:
 
 #+BEGIN_SRC python :session *Python*
