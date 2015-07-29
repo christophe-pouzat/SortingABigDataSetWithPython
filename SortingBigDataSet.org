@@ -1672,7 +1672,6 @@ We start with a =Class= that we call =MultiChannelData=. In general we think of 
 #+BEGIN_SRC python :session *Python* :results silent
 class MultiChannelData:
     """Mutli- or Single- channel data."""
-    import numpy as np
     def __init__(self, data, start=0, sampling_rate=15000):
         """Create a new MultiChannelData instance.
 
@@ -1680,6 +1679,7 @@ class MultiChannelData:
         start          the time (in seconds) at which acquisition started 
         sampling_rate  the sampling_rate used during the acquisition (in Hz)
         """
+        import numpy as np
         if not isinstance(data,(list,np.ndarray)):
             raise TypeError('data must be a list or a numpy ndarray')
         elif sampling_rate <= 0:
@@ -1731,6 +1731,7 @@ class MultiChannelData:
 
         If amount is not specified the median is used.
         """
+        import numpy as np
         if amount is None:
             amount = self.median()
         if not len(amount) == self.nb_channels():
@@ -1738,12 +1739,14 @@ class MultiChannelData:
         self._data = self._data - np.array(amount).reshape(self.nb_channels(),1)
     def mad(self):
         """Return median absolute deviation of each channel."""
+        import numpy as np
         return np.median(np.absolute(self._data-np.median(self._data,axis=1).reshape(self.nb_channels(),1)),axis=1)*1.4826
     def scale(self,factors=None):
         """Divides each channel by the corresponding element of factors.
 
         If factors is not specified the MAD is used.
         """
+        import numpy as np
         if factors is None:
             factors = self.mad()
         if not len(factors) == self.nb_channels():
@@ -1751,16 +1754,39 @@ class MultiChannelData:
         self._data = self._data / np.array(factors).reshape(self.nb_channels(),1)
     def mean(self):
         """Return mean of each channel."""
+        import numpy as np
         return np.mean(self._data,axis=1)
     def std(self):
         """Return standard deviation of each channel."""
+        import numpy as np
         return np.std(self._data,axis=1)
     def var(self):
         """Return variance of each channel."""
+        import numpy as np
         return np.var(self._data,axis=1)
+    def copy(self):
+        """Return a new instance that is a copy of the present one."""
+        return MultiChannelData(self._data.copy(),self._start,self._sampling_rate)
+    def __getitem__(self,key):
+        """Return a new subsetted instance."""
+        if not len(key) == 2:
+            raise ValueError('key must select along both dimensions')
+        if isinstance(key[1],slice) and not key[1].step is None:
+            raise ValueError('selection along the second dimension must be done with a step of 1')
+        foo = self._data.__getitem__(key)
+        if len(foo.shape)==1:
+            foo.shape = (1,foo.shape[0])
+        if isinstance(key[1],slice) and key[1].start is None:
+            begin = self._start
+        elif isinstance(key[1],slice) and not key[1].start is None:
+            begin = key[1].start/self._sampling_rate+self._start
+        else:
+            begin = key[1][0]/self._sampling_rate+self._start
+        return MultiChannelData(foo,begin,self._sampling_rate)
     def plot(self,linewidth=0.2,color='black'):
         """Plot the data."""
         import matplotlib.pyplot as plt
+        import numpy as np
         nb_chan = self.nb_channels()
         data_min = np.min(self._data,axis=1) 
         data_max = np.max(self._data,axis=1)
