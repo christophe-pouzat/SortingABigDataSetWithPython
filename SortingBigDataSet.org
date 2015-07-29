@@ -1660,7 +1660,7 @@ The number of spikes attributed to each neuron is:
 
 Keep in mind that clusters 4 and 6 are very close to noise level and should not be considered for further analysis.
 
-* Defining classes and methods for a systematic analysis of the remaining of the experiment
+* Defining classes and methods for a systematic analysis of the remaining of the experiment :export:
 
 At that stage we want to take the next epoch of 29 seconds of spontaneous activity and, using our "templates catalog", =centers=, recursively detect spikes, subtract the closest catalog member, until there is "nothing left". To track potential electrode drifts resulting in clusters waveform changes, we want, after the classification of each epoch, to recompute the median of each cluster as long as the latter as enough associated events or make a compromise between the former median and the new one when there aren't enough associated events. Do do all that, we don't want to type as many command lines as we just did; that's why we are going to introduce some classes and associated methods.
 
@@ -1709,21 +1709,72 @@ class MultiChannelData:
     def sample2time(self,sample_point):
         """Converts sample point to time in seconds."""
         if not 0 <= sample_point <= self._length:
-            raise ValueError('sample_point must non negative  positive and smaller than ' + str(self._length))
+            raise ValueError('sample_point must be non negative and smaller than ' + str(self._length))
         return sample_point/self._sampling_rate + self._start
     def time2sample(self,time):
         """Converts time in second to sample point."""
-        if not self._start <= time < self._start+duration(self):
-            raise ValueError('time must be larger than ' + str(start) + ' and  smaller than ' + str(self._start+duration(self)))
-        return round((time-self._start)/self._sampling_rate)
+        if not self._start <= time < self._start+self.duration():
+            raise ValueError('time must be larger than ' + str(start) + ' and  smaller than ' + str(self._start+self.duration()))
+        return round((time-self._start)*self._sampling_rate)
     def quantiles(self, prob=[0,0.25,0.5,0.75,1]):
         """Return quantiles of each channel.
 
         prob see mquantiles in scipy.stats.mstats (default gives 5 numbers summary)
         """
         from scipy.stats.mstats import mquantiles
-        return mquantiles(self._data,prob, axis=1)
+        return mquantiles(self._data,prob=prob, axis=1)
+    def median(self):
+        """Return median of each channel."""
+        return self.quantiles(0.5)
+    def offset(self,amount=None):
+        """Offset each channel by the content of amount.
 
+        If amount is not specified the median is used.
+        """
+        if amount is None:
+            amount = self.median()
+        if not len(amount) == self.nb_channels():
+            raise ValueError("amount's length must be " + str(self.nb_channels()))
+        self._data = self._data - np.array(amount).reshape(self.nb_channels(),1)
+    def mad(self):
+        """Return median absolute deviation of each channel."""
+        return np.median(np.absolute(self._data-np.median(self._data,axis=1).reshape(self.nb_channels(),1)),axis=1)*1.4826
+    def scale(self,factors=None):
+        """Divides each channel by the corresponding element of factors.
+
+        If factors is not specified the MAD is used.
+        """
+        if factors is None:
+            factors = self.mad()
+        if not len(factors) == self.nb_channels():
+            raise ValueError("factors' length must be " + str(self.nb_channels()))
+        self._data = self._data / np.array(factors).reshape(self.nb_channels(),1)
+    def mean(self):
+        """Return mean of each channel."""
+        return np.mean(self._data,axis=1)
+    def std(self):
+        """Return standard deviation of each channel."""
+        return np.std(self._data,axis=1)
+    def var(self):
+        """Return variance of each channel."""
+        return np.var(self._data,axis=1)
+    def plot(self,linewidth=0.2,color='black'):
+        """Plot the data."""
+        import matplotlib.pyplot as plt
+        nb_chan = self.nb_channels()
+        data_min = np.min(self._data,axis=1) 
+        data_max = np.max(self._data,axis=1)
+        display_offset = list(np.cumsum(np.array([0] +
+                                                 [data_max[i]-data_min[i-1]
+                                                  for i in range(1,nb_chan)])))
+        tt = np.arange(len(self))/self._sampling_rate+self._start
+        for i in range(nb_chan):
+            plt.plot(tt,self._data[i,:]-display_offset[i],
+                     linewidth=linewidth,color=color)
+        plt.yticks([])
+        plt.xlim([self._start,self._start+self.duration()])
+        plt.xlabel("Time (s)")
+        
 #+END_SRC
  
 * Clean up, etc :export:

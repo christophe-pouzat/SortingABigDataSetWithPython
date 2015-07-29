@@ -4,7 +4,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
 <title>Sorting a Big Data Set With Python</title>
-<!-- 2015-07-28 mar. 17:31 -->
+<!-- 2015-07-29 mer. 14:57 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="generator" content="Org-mode" />
 <meta  name="author" content="Christophe Pouzat" />
@@ -244,7 +244,12 @@ for the JavaScript code in this tag.
 <li><a href="#sec-4-9">4.9. Getting the spike trains</a></li>
 </ul>
 </li>
-<li><a href="#sec-5">5. Clean up, etc</a></li>
+<li><a href="#sec-5">5. Defining classes and methods for a systematic analysis of the remaining of the experiment</a>
+<ul>
+<li><a href="#sec-5-1">5.1. MultiChannelData Class</a></li>
+</ul>
+</li>
+<li><a href="#sec-6">6. Clean up, etc</a></li>
 </ul>
 </div>
 </div>
@@ -1431,7 +1436,7 @@ Function <code>classify_and_align_evt</code> is used next. For each detected eve
 </div>
 
 <pre class="example">
-['Cluster 4', 41, -0.76949494497587501]
+['Cluster 4', 41, -0.76918445702167082]
 </pre>
 
 <p>
@@ -1457,7 +1462,7 @@ We can check how many events got unclassified on a total of <code>2325</code>:
 </div>
 
 <pre class="example">
-55
+56
 </pre>
 
 <p>
@@ -1549,7 +1554,7 @@ We can check how many events got unclassified on a total of <code>581</code>:
 </div>
 
 <pre class="example">
-122
+126
 </pre>
 
 <p>
@@ -1658,14 +1663,14 @@ We take <code>data2</code> as our former <code>data1</code> and we repeat the pr
 </div>
 
 <pre class="example">
-Number of detected events: 454
+Number of detected events: 452
     Number of spikes from unit 0: 0
     Number of spikes from unit 1: 7
     Number of spikes from unit 2: 0
     Number of spikes from unit 3: 1
-    Number of spikes from unit 4: 97
+    Number of spikes from unit 4: 96
     Number of spikes from unit 5: 0
-    Number of spikes from unit 6: 271
+    Number of spikes from unit 6: 270
     Number of spikes from unit 7: 2
     Number of unclassified events: 76
 </pre>
@@ -1712,16 +1717,16 @@ We take <code>data3</code> as our former <code>data2</code> and we repeat the pr
 </div>
 
 <pre class="example">
-Number of detected events: 564
+Number of detected events: 556
     Number of spikes from unit 0: 0
     Number of spikes from unit 1: 0
     Number of spikes from unit 2: 0
     Number of spikes from unit 3: 1
-    Number of spikes from unit 4: 168
+    Number of spikes from unit 4: 164
     Number of spikes from unit 5: 6
-    Number of spikes from unit 6: 335
+    Number of spikes from unit 6: 333
     Number of spikes from unit 7: 0
-    Number of unclassified events: 54
+    Number of unclassified events: 52
 </pre>
 
 <p>
@@ -1840,9 +1845,9 @@ The number of spikes attributed to each neuron is:
  ('Cluster 1', 259),
  ('Cluster 2', 126),
  ('Cluster 3', 71),
- ('Cluster 4', 982),
- ('Cluster 5', 452),
- ('Cluster 6', 1615),
+ ('Cluster 4', 978),
+ ('Cluster 5', 451),
+ ('Cluster 6', 1609),
  ('Cluster 7', 37)]
 </pre>
 
@@ -1854,8 +1859,135 @@ Keep in mind that clusters 4 and 6 are very close to noise level and should not 
 </div>
 
 <div id="outline-container-sec-5" class="outline-2">
-<h2 id="sec-5"><span class="section-number-2">5</span> Clean up, etc</h2>
+<h2 id="sec-5"><span class="section-number-2">5</span> Defining classes and methods for a systematic analysis of the remaining of the experiment</h2>
 <div class="outline-text-2" id="text-5">
+<p>
+At that stage we want to take the next epoch of 29 seconds of spontaneous activity and, using our "templates catalog", <code>centers</code>, recursively detect spikes, subtract the closest catalog member, until there is "nothing left". To track potential electrode drifts resulting in clusters waveform changes, we want, after the classification of each epoch, to recompute the median of each cluster as long as the latter as enough associated events or make a compromise between the former median and the new one when there aren't enough associated events. Do do all that, we don't want to type as many command lines as we just did; that's why we are going to introduce some classes and associated methods.
+</p>
+</div>
+
+<div id="outline-container-sec-5-1" class="outline-3">
+<h3 id="sec-5-1"><span class="section-number-3">5.1</span> MultiChannelData Class</h3>
+<div class="outline-text-3" id="text-5-1">
+<p>
+We start with a <code>Class</code> that we call <code>MultiChannelData</code>. In general we think of using it to store and display multi-channel data (like data from a tetrode), but we will design it to work with single channel data as well.
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="MultiChannelData-Class-defintion">class MultiChannelData:
+    """Mutli- or Single- channel data."""
+    import numpy as np
+    def __init__(self, data, start=0, sampling_rate=15000):
+        """Create a new MultiChannelData instance.
+
+        data           an array (nb_channels x nb_samples) or a list containing the data
+        start          the time (in seconds) at which acquisition started 
+        sampling_rate  the sampling_rate used during the acquisition (in Hz)
+        """
+        if not isinstance(data,(list,np.ndarray)):
+            raise TypeError('data must be a list or a numpy ndarray')
+        elif sampling_rate &lt;= 0:
+            raise ValueError('sampling_rate must be positive')
+        if isinstance(data,list):
+            self._data = np.array(data)
+        else:
+            self._data = data
+        self._start = start
+        self._sampling_rate = sampling_rate
+        self._nb_channels, self._length = self._data.shape
+    def duration(self):
+        """The recording duration in seconds."""
+        return self._length/self._sampling_rate
+    def __len__(self):
+        """Return number of samples."""
+        return self._length
+    def nb_channels(self):
+        """Return number of channels."""
+        return self._nb_channels
+    def start_time(self):
+        """The recording start time in seconds."""
+        return self._start
+    def get_data(self):
+        """Extract the actual data."""
+        return self._data
+    def sample2time(self,sample_point):
+        """Converts sample point to time in seconds."""
+        if not 0 &lt;= sample_point &lt;= self._length:
+            raise ValueError('sample_point must be non negative and smaller than ' + str(self._length))
+        return sample_point/self._sampling_rate + self._start
+    def time2sample(self,time):
+        """Converts time in second to sample point."""
+        if not self._start &lt;= time &lt; self._start+self.duration():
+            raise ValueError('time must be larger than ' + str(start) + ' and  smaller than ' + str(self._start+self.duration()))
+        return round((time-self._start)*self._sampling_rate)
+    def quantiles(self, prob=[0,0.25,0.5,0.75,1]):
+        """Return quantiles of each channel.
+
+        prob see mquantiles in scipy.stats.mstats (default gives 5 numbers summary)
+        """
+        from scipy.stats.mstats import mquantiles
+        return mquantiles(self._data,prob=prob, axis=1)
+    def median(self):
+        """Return median of each channel."""
+        return self.quantiles(0.5)
+    def offset(self,amount=None):
+        """Offset each channel by the content of amount.
+
+        If amount is not specified the median is used.
+        """
+        if amount is None:
+            amount = self.median()
+        if not len(amount) == self.nb_channels():
+            raise ValueError("amount's length must be " + str(self.nb_channels()))
+        self._data = self._data - np.array(amount).reshape(self.nb_channels(),1)
+    def mad(self):
+        """Return median absolute deviation of each channel."""
+        return np.median(np.absolute(self._data-np.median(self._data,axis=1).reshape(self.nb_channels(),1)),axis=1)*1.4826
+    def scale(self,factors=None):
+        """Divides each channel by the corresponding element of factors.
+
+        If factors is not specified the MAD is used.
+        """
+        if factors is None:
+            factors = self.mad()
+        if not len(factors) == self.nb_channels():
+            raise ValueError("factors' length must be " + str(self.nb_channels()))
+        self._data = self._data / np.array(factors).reshape(self.nb_channels(),1)
+    def mean(self):
+        """Return mean of each channel."""
+        return np.mean(self._data,axis=1)
+    def std(self):
+        """Return standard deviation of each channel."""
+        return np.std(self._data,axis=1)
+    def var(self):
+        """Return variance of each channel."""
+        return np.var(self._data,axis=1)
+    def plot(self,linewidth=0.2,color='black'):
+        """Plot the data."""
+        import matplotlib.pyplot as plt
+        nb_chan = self.nb_channels()
+        data_min = np.min(self._data,axis=1) 
+        data_max = np.max(self._data,axis=1)
+        display_offset = list(np.cumsum(np.array([0] +
+                                                 [data_max[i]-data_min[i-1]
+                                                  for i in range(1,nb_chan)])))
+        tt = np.arange(len(self))/self._sampling_rate+self._start
+        for i in range(nb_chan):
+            plt.plot(tt,self._data[i,:]-display_offset[i],
+                     linewidth=linewidth,color=color)
+        plt.yticks([])
+        plt.xlim([self._start,self._start+self.duration()])
+        plt.xlabel("Time (s)")
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-6" class="outline-2">
+<h2 id="sec-6"><span class="section-number-2">6</span> Clean up, etc</h2>
+<div class="outline-text-2" id="text-6">
 <div class="org-src-container">
 
 <pre class="src src-python">hdf.close()
@@ -1892,7 +2024,7 @@ Christophe Pouzat. (2015). PouzatDetorakisEuroScipy2014: Complet avec référenc
 </div></div>
 <div id="postamble" class="status">
 <p class="author">Author: Christophe Pouzat</p>
-<p class="date">Created: 2015-07-28 mar. 17:31</p>
+<p class="date">Created: 2015-07-29 mer. 14:57</p>
 <p class="creator">Emacs 24.5.1 (Org mode 8.2.10)</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
