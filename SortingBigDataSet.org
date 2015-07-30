@@ -620,6 +620,7 @@ from numpy import apply_along_axis as apply
 data_filtered = apply(lambda x:
                       fftconvolve(x,np.array([1,1,1,1,1])/5.,'same'),
                       1,np.array(data))
+data_filtered -= np.median(data_filtered,axis=1).reshape(len(data),1)
 data_filtered = (data_filtered.transpose() / \
                  apply(swp.mad,1,data_filtered)).transpose()
 data_filtered[data_filtered > -3] = 0
@@ -1687,7 +1688,7 @@ class MultiChannelData:
         if isinstance(data,list):
             self._data = np.array(data)
         else:
-            self._data = data
+            self._data = data.copy()
         self._start = start
         self._sampling_rate = sampling_rate
         self._nb_channels, self._length = self._data.shape
@@ -1800,9 +1801,238 @@ class MultiChannelData:
         plt.yticks([])
         plt.xlim([self._start,self._start+self.duration()])
         plt.xlabel("Time (s)")
+    def derivative(self):
+        """Return a MultiChannelData instance with the time derivative of the original one."""
+        from scipy.signal import fftconvolve
+        from numpy import apply_along_axis as apply
+        return MultiChannelData(apply(lambda x: fftconvolve(x,np.array([1,0,-1])/2.,'same'),1, self._data),
+                                self._start,self._sampling_rate)
+
+#+END_SRC
+
+** DetectedSpikes Class
+
+=Class= =DetectedSpikes= will store the spikes (local maxima or minima) detection results.
+
+#+NAME: DetectedSpikes-Class-definition
+#+BEGIN_SRC python :session *Python* :results silent
+class DetectedSpikes:
+    """Detected spikes."""
+    def __init__(self,MCD_instance,threshold=4,filter_length=3,channels=None,minimal_dist=15,not_zero=1e-3):
+        """Create a new DetectedSpikes instance.
+
+        MCD_instance    a MultiChannelData instance
+        threshold       a number, the mutiple of the MAD beyond which extrema are recorded 
+                        (positive for peaks, negative for valleys)
+        filter_length   a positive integer setting the length of the box filter used to 
+                        filter the data prior to detection
+        channels        a list with the channels to use for detection
+        minimal_dist    a positive integer, the minimal distance between two successive peaks
+        not_zero        a positive float, the smallest value above which the absolute value of
+                        the derivative is considered not null.
+        """
+        import numpy as np
+        from scipy.signal import fftconvolve
+        from numpy import apply_along_axis as apply
+        if not isinstance(MCD_instance,MultiChannelData):
+            raise TypeError('MCD_instance must be a MultiChannelData instance')
+        if not isinstance(threshold,(int,float)):
+            raise TypeError('threshold must be a number')
+        if not isinstance(filter_length,int) or filter_length <= 0:
+            raise TypeError('filter_length must be a positive integer')
+        if not isinstance(minimal_dist,int) or minimal_dist <= 0:
+            raise TypeError('minimal_dist must be a positive integer')
+        if not isinstance(not_zero,float) or not_zero <= 0:
+            raise TypeError('not_zero must be a positive float')
+        if channels is None:
+            channels = range(MCD_instance._data.shape[0])
+        elif isinstance(channels,int):
+            channels = [channels]
+        self._MCD = MCD_instance
+        self._threshold = threshold
+        self._filter_length = filter_length
+        self._channels = channels
+        self._minimal_dist = minimal_dist
+        self._not_zero = not_zero
+        data = MCD_instance.get_data().copy()[channels,:]
+        data_median = np.median(data,axis=1)
+        data = data-data_median.reshape(len(channels),1)
+        data_mad = np.median(np.abs(data),axis=1)*1.4826
+        data = data / data_mad.reshape(len(channels),1)
+        data_filtered = apply(lambda x:
+                              fftconvolve(x,np.ones(filter_length)/filter_length,'same'),
+                              1,data)
+        data_filtered_median = np.median(data_filtered,axis=1)
+        data_filtered = data_filtered-data_filtered_median.reshape(len(channels),1)
+        data_filtered_mad = np.median(np.abs(data_filtered),axis=1)*1.4826
+        data_filtered = data_filtered / data_filtered_mad.reshape(len(channels),1)
+        if threshold < 0:
+            data_filtered[data_filtered > threshold] = 0
+            data_filtered = -data_filtered.sum(0)
+        else:
+            data_filtered[data_filtered < threshold] = 0
+            data_filtered = data_filtered.sum(0)
+        dx = fftconvolve(data_filtered,np.array([1,0,-1])/2.,'same') 
+        dx[np.abs(dx) < not_zero] = 0
+        dx = np.diff(np.sign(dx))
+        pos = np.arange(len(dx))[dx < 0]
+        self._spike_positions = pos[:-1][np.diff(pos) > minimal_dist]
+        self._k = -1
+    def __len__(self):
+        """Return the number of detected spikes."""
+        return len(self._spike_positions)
+    def __str__(self):
+        """Controls the printed version of the instance."""
+        import numpy as np
+        return "An instance of DetectedSpikes.\n" \
+            + "  Spikes were detected on " + str(len(self._channels)) + " channels simultaneously (" \
+            + str(list(self._channels)) + ").\n" \
+            + "  A boxe filter with length " + str(self._filter_length) + " was used.\n" \
+            + "  The detection threshold (multiple of the MAD) was set at " + str(self._threshold) + ".\n" \
+            + "  " + str(len(self._spike_positions)) + " putative spikes were detected. The smallest inter spike interval is: " \
+            + str(np.min(np.diff(self._spike_positions))) + ", and the largest is: " + str(np.max(np.diff(self._spike_positions))) \
+            + ".\n  The mean ISI is: " + str(int(np.mean(np.diff(self._spike_positions)))) + " and the ISI SD is: " \
+            + str(int(np.std(np.diff(self._spike_positions)))) + ".\n"
+    def __next__(self):
+        """Return the next element, or else raise StopIteration error."""
+        self._k += 1
+        if self._k < len(self._spike_positions):
+            return self._spike_positions[self._k]
+        else:
+            raise StopIteration()
+    def __iter__(self):
+        """By convention, an iterator must return itself as an iterator."""
+        return self
+    def get_spike_positions(self):
+        """Return an array with the spike positions."""
+        return self._spike_positions
+    def plot(self,linewidth=0.2,color='black'):
+        """Plot the data with the detected spikes."""
+        import matplotlib.pyplot as plt
+        import numpy as np
+        nb_chan = self._MCD.nb_channels()
+        data_min = np.min(self._MCD._data,axis=1) 
+        data_max = np.max(self._MCD._data,axis=1)
+        display_offset = list(np.cumsum(np.array([0] +
+                                                 [data_max[i]-data_min[i-1]
+                                                  for i in range(1,nb_chan)])))
+        tt = np.arange(len(self._MCD))/self._MCD._sampling_rate+self._MCD._start
+        for i in range(nb_chan):
+            plt.plot(tt,self._MCD._data[i,:]-display_offset[i],
+                     linewidth=linewidth,color=color)
+            plt.plot(tt[self._spike_positions],
+                     self._MCD._data[i,self._spike_positions]-display_offset[i],'ro')
+        plt.yticks([])
+        plt.xlim([self._MCD._start,self._MCD._start+self._MCD.duration()])
+        plt.xlabel("Time (s)")
         
 #+END_SRC
- 
+
+** Sample Class
+
+=Class= =Sample= is designed to contain the events' sample, that is a collection of cuts around each detected spikes.
+
+#+NAME: Sample-Class-definition
+#+BEGIN_SRC python :session *Python* :results silent
+class Sample:
+    """Events' sample: a collection of cuts around detected spikes."""
+    def __init__(self, DS_instance, before=14, after=30):
+        """Create a new Sample instance.
+
+        DS_instance a DetectedSpikes instance
+        before a positive integer specifying were the cut starts before the spike position
+        after  a positive integer specifying were the cut ends after the spike position
+        """
+        import numpy as np
+        if not isinstance(DS_instance,DetectedSpikes):
+            raise TypeError('DS_instance must be a DetectedSpikes instance')
+        if not isinstance(before,int) or before <= 0:
+            raise TypeError('before must be a positive integer')
+        if not isinstance(after,int) or after <= 0:
+            raise TypeError('after must be a positive integer')
+        ns,dl = DS_instance._MCD._data.shape
+        cl = before+after+1 ## The length of the cut
+        cs = cl*ns ## The 'size' of a cut
+        cut = np.zeros((ns,cl))
+        idx = np.arange(-before,after+1)
+        def cut_sgl_evt(evt_pos):
+            """Make a cut corresponding to a spike located at evt_pos."""
+            keep = idx + evt_pos
+            within = np.bitwise_and(0 <= keep, keep < dl)
+            kw = keep[within]
+            cut[:,within] = DS_instance._MCD._data[:,kw].copy()
+            return cut.reshape(cs)
+        res = np.zeros((len(DS_instance),(before+after+1)*ns))
+        for i,p in enumerate(DS_instance.get_spike_positions()):
+            res[i,:] = cut_sgl_evt(p)
+        self._data = res
+        self._before = before
+        self._after = after
+        self._DS = DS_instance
+    def shape(self):
+        """The shape."""
+        return self._data.shape
+    def get_data(self):
+        """Get the data."""
+        return self._data
+    def mean(self):
+        """Mean sample member."""
+        import numpy as np
+        return np.mean(self._data,axis=0)
+    def median(self):
+        """Median sample member."""
+        import numpy as np
+        return np.median(self._data,axis=0)
+    def mad(self):
+        """Sample's MAD."""
+        import numpy as np
+        return np.median(np.abs(self._data - self.median().reshape(1,self.shape()[1])),axis=0)*1.4826
+    def std(self):
+        """Sample's STD."""
+        import numpy as np
+        return np.std(self._data,axis=0)
+    def var(self):
+        """Sample's variance."""
+        import numpy as np
+        return np.var(self._data,axis=0)
+    def plot(self,events_color='black',events_lw=0.1,
+             show_median=True,median_color='red',
+             median_lw=1,show_mad=True,
+             mad_color='blue',mad_lw=1):
+        """Plot Sample.
+
+        events_color color used for the events
+        events_lw    line width used for the events
+        show_median  should the median be shown
+        median_color color used for the median if shown
+        median_lw    line width used for the median if shown
+        show_mad  should the mad be shown
+        mad_color color used for the mad if shown
+        mad_lw    line width used for the mad if shown
+        """
+        import numpy as np
+        import matplotlib.pylab as plt
+        n_channels = self._DS._MCD._data.shape[0]
+        cut_length = self._before + self._after + 1
+        for i in range(self.shape()[0]):
+            plt.plot(self.get_data()[i,:], color=events_color, lw=events_lw)
+        if show_median:
+            MEDIAN = self.median()
+            plt.plot(MEDIAN, color=median_color, lw=median_lw)
+        if show_mad:
+            MAD = self.mad() + np.repeat(self._DS._MCD.median(),cut_length)
+            plt.plot(MAD, color=mad_color, lw=mad_lw)
+        left_boundary = np.arange(cut_length,
+                                  self.shape()[1],
+                                  cut_length*2)
+        for l in left_boundary:
+            plt.axvspan(l,l+cut_length-1,
+                        facecolor='grey',alpha=0.5,edgecolor='none')
+        plt.xticks([])
+        plt.ylim([np.min(self.get_data()),np.max(self.get_data())])
+        
+#+END_SRC
+
 * Clean up, etc :export:
 
 #+BEGIN_SRC python :session *Python*
