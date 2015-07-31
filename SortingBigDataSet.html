@@ -4,7 +4,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
 <title>Sorting a Big Data Set With Python</title>
-<!-- 2015-07-30 jeu. 17:10 -->
+<!-- 2015-07-31 ven. 17:56 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="generator" content="Org-mode" />
 <meta  name="author" content="Christophe Pouzat" />
@@ -1880,10 +1880,13 @@ We start with a <code>Class</code> that we call <code>MultiChannelData</code>. I
 
 <pre class="src src-python" id="MultiChannelData-Class-defintion">class MultiChannelData:
     """Mutli- or Single- channel data."""
-    def __init__(self, data, start=0, sampling_rate=15000):
+    def __init__(self, data, channel_names, start=0, sampling_rate=15000):
         """Create a new MultiChannelData instance.
 
         data           an array (nb_channels x nb_samples) or a list containing the data
+        channel_names  a list of strings with the channel names 
+                       (like ['Ch 1','Ch 2','Ch 3','Ch 4']) or a string with the single
+                       channel name if data from one electrode are used
         start          the time (in seconds) at which acquisition started 
         sampling_rate  the sampling_rate used during the acquisition (in Hz)
         """
@@ -1896,34 +1899,35 @@ We start with a <code>Class</code> that we call <code>MultiChannelData</code>. I
             self._data = np.array(data)
         else:
             self._data = data.copy()
-        self._start = start
-        self._sampling_rate = sampling_rate
-        self._nb_channels, self._length = self._data.shape
+        if not isinstance(channel_names,list):
+            channel_names = [channel_names]
+        if not all([isinstance(n,str) for n in channel_names]):
+            raise ValueError('elements of channel_names must be string instances')
+        self.start = start
+        self.channel_names = channel_names
+        self.sampling_rate = sampling_rate
+        self.nb_channels, self.length = self._data.shape
+    @property
     def duration(self):
         """The recording duration in seconds."""
-        return self._length/self._sampling_rate
+        return self.length/self.sampling_rate
     def __len__(self):
         """Return number of samples."""
-        return self._length
-    def nb_channels(self):
-        """Return number of channels."""
-        return self._nb_channels
-    def start_time(self):
-        """The recording start time in seconds."""
-        return self._start
+        return self.length
+    @property
     def get_data(self):
         """Extract the actual data."""
         return self._data
     def sample2time(self,sample_point):
         """Converts sample point to time in seconds."""
-        if not 0 &lt;= sample_point &lt;= self._length:
-            raise ValueError('sample_point must be non negative and smaller than ' + str(self._length))
-        return sample_point/self._sampling_rate + self._start
+        if not 0 &lt;= sample_point &lt;= self.length:
+            raise ValueError('sample_point must be non negative and smaller than ' + str(self.length))
+        return sample_point/self.sampling_rate + self.start
     def time2sample(self,time):
         """Converts time in second to sample point."""
-        if not self._start &lt;= time &lt; self._start+self.duration():
-            raise ValueError('time must be larger than ' + str(start) + ' and  smaller than ' + str(self._start+self.duration()))
-        return round((time-self._start)*self._sampling_rate)
+        if not self.start &lt;= time &lt; self.start+self.duration:
+            raise ValueError('time must be larger than ' + str(self.start) + ' and  smaller than ' + str(self.start+self.duration))
+        return round((time-self.start)*self.sampling_rate)
     def quantiles(self, prob=[0,0.25,0.5,0.75,1]):
         """Return quantiles of each channel.
 
@@ -1931,50 +1935,62 @@ We start with a <code>Class</code> that we call <code>MultiChannelData</code>. I
         """
         from scipy.stats.mstats import mquantiles
         return mquantiles(self._data,prob=prob, axis=1)
+    @property
     def median(self):
         """Return median of each channel."""
-        return self.quantiles(0.5)
+        import numpy as np
+        return np.median(self._data,axis=1)
     def offset(self,amount=None):
-        """Offset each channel by the content of amount.
+        """Return a new MultiChannelData instance whereeach channel is offest by the content of amount.
 
         If amount is not specified the median is used.
         """
         import numpy as np
         if amount is None:
-            amount = self.median()
-        if not len(amount) == self.nb_channels():
-            raise ValueError("amount's length must be " + str(self.nb_channels()))
-        self._data = self._data - np.array(amount).reshape(self.nb_channels(),1)
+            amount = self.median
+        if not len(amount) == self.nb_channels:
+            raise ValueError("amount's length must be " + str(self.nb_channels))
+        return MultiChannelData(self._data - np.array(amount).reshape(self.nb_channels,1),self.channel_names,self.start,self.sampling_rate)
+    @property
     def mad(self):
         """Return median absolute deviation of each channel."""
         import numpy as np
-        return np.median(np.absolute(self._data-np.median(self._data,axis=1).reshape(self.nb_channels(),1)),axis=1)*1.4826
+        return np.median(np.absolute(self._data-self.median.reshape(self.nb_channels,1)),axis=1)*1.4826
     def scale(self,factors=None):
-        """Divides each channel by the corresponding element of factors.
+        """Return a new MultiChannelData instance where each channel is divided by the corresponding element of factors.
 
         If factors is not specified the MAD is used.
         """
         import numpy as np
         if factors is None:
-            factors = self.mad()
-        if not len(factors) == self.nb_channels():
-            raise ValueError("factors' length must be " + str(self.nb_channels()))
-        self._data = self._data / np.array(factors).reshape(self.nb_channels(),1)
+            factors = self.mad
+        if not len(factors) == self.nb_channels:
+            raise ValueError("factors' length must be " + str(self.nb_channels))
+        return MultiChannelData(self._data / np.array(factors).reshape(self.nb_channels,1),self.channel_names,self.start,self.sampling_rate)
+    @property
+    def normalize(self):
+        """Return a new MultiChannelData instance with normalized (median null and MAD at 1) amplitudes on each channel."""
+        import numpy as np
+        norm_data = (self._data - self.median.reshape(self.nb_channels,1))/self.mad.reshape(self.nb_channels,1)
+        return MultiChannelData(norm_data,self.channel_names,self.start,self.sampling_rate)
+    @property
     def mean(self):
         """Return mean of each channel."""
         import numpy as np
         return np.mean(self._data,axis=1)
+    @property
     def std(self):
         """Return standard deviation of each channel."""
         import numpy as np
         return np.std(self._data,axis=1)
+    @property
     def var(self):
         """Return variance of each channel."""
         import numpy as np
         return np.var(self._data,axis=1)
     def copy(self):
         """Return a new instance that is a copy of the present one."""
-        return MultiChannelData(self._data.copy(),self._start,self._sampling_rate)
+        return MultiChannelData(self._data.copy(),self.channel_names,self.start,self.sampling_rate)
     def __getitem__(self,key):
         """Return a new subsetted instance."""
         if not len(key) == 2:
@@ -1985,35 +2001,105 @@ We start with a <code>Class</code> that we call <code>MultiChannelData</code>. I
         if len(foo.shape)==1:
             foo.shape = (1,foo.shape[0])
         if isinstance(key[1],slice) and key[1].start is None:
-            begin = self._start
+            begin = self.start
         elif isinstance(key[1],slice) and not key[1].start is None:
-            begin = key[1].start/self._sampling_rate+self._start
+            begin = key[1].start/self.sampling_rate+self.start
         else:
-            begin = key[1][0]/self._sampling_rate+self._start
-        return MultiChannelData(foo,begin,self._sampling_rate)
-    def plot(self,linewidth=0.2,color='black'):
+            begin = key[1][0]/self.sampling_rate+self.start
+        return MultiChannelData(foo,self.channel_names[key[0]],begin,self.sampling_rate)
+    def plot(self,linewidth=0.2,color='black',xlabel="Time (s)"):
         """Plot the data."""
         import matplotlib.pyplot as plt
         import numpy as np
-        nb_chan = self.nb_channels()
+        nb_chan = self.nb_channels
         data_min = np.min(self._data,axis=1) 
         data_max = np.max(self._data,axis=1)
         display_offset = list(np.cumsum(np.array([0] +
                                                  [data_max[i]-data_min[i-1]
                                                   for i in range(1,nb_chan)])))
-        tt = np.arange(len(self))/self._sampling_rate+self._start
+        tt = np.arange(len(self))/self.sampling_rate+self.start
         for i in range(nb_chan):
             plt.plot(tt,self._data[i,:]-display_offset[i],
                      linewidth=linewidth,color=color)
         plt.yticks([])
-        plt.xlim([self._start,self._start+self.duration()])
-        plt.xlabel("Time (s)")
+        plt.xlim([self.start,self.start+self.duration])
+        plt.xlabel(xlabel)
+    @property
     def derivative(self):
-        """Return a MultiChannelData instance with the time derivative of the original one."""
+        """Return a MultiChannelData instance with the time derivative of the original one (the time unit is the sampling period)."""
         from scipy.signal import fftconvolve
         from numpy import apply_along_axis as apply
         return MultiChannelData(apply(lambda x: fftconvolve(x,np.array([1,0,-1])/2.,'same'),1, self._data),
-                                self._start,self._sampling_rate)
+                                self.channel_names,self.start,self.sampling_rate)
+    def box_filter(self,filter_length):
+        """Return a MultiChannelData instance with each channel box filtered with a filter of length filter_length."""
+        from scipy.signal import fftconvolve
+        import numpy as np
+        from numpy import apply_along_axis as apply
+        if not isinstance(filter_length,int) or filter_length &lt;= 0:
+            raise TypeError('filter_length must be a positive integer')
+        data_filtered = apply(lambda x:
+                              fftconvolve(x,np.ones(filter_length)/filter_length,'same'),
+                              1,self._data)
+        return MultiChannelData(data_filtered,self.channel_names,self.start,self.sampling_rate)
+    def rectify(self,threshold):
+        """Return a MultiChannelData instance with each channel value set to zero if 
+        its initial value is smaller than threshold (when the latter is positve) or
+        larger than threshold (when the latter is negative). The initial amplitudes
+        are normalized first (median set at 0 and MAD at 1).
+        """
+        import numpy as np
+        rect_data = self.normalize.get_data
+        if threshold &lt; 0:
+            rect_data[rect_data &gt; threshold] = 0
+        else:
+            rect_data[rect_data &lt; threshold] = 0
+        return MultiChannelData(rect_data,self.channel_names,self.start,self.sampling_rate)
+    def find_extrema(self,filter_length=3,threshold=-4,minimal_dist=15,not_zero=1e-3,return_dict=False):
+        """Return an array with extrema locations (in sample points) or a dictionnary with 
+        extrema postions and all the parameters.
+
+        filter_length   the length (in sample points) of the box_filter
+                        applied prior to rectification.
+        threshold       the multiple of the MAD used to detect extrema:
+                        minima if threshold in negative, maxima otherwise.
+        minimal_dist    a positive integer, the minimal distance between two successive peaks
+        not_zero        a positive float, the smallest value above which the absolute value of
+                        the derivative is considered not null.
+        return_dict     a boolean controlling the type of result
+        
+        The filtered version of the data is normalized (median set at 0 and
+        MAD set at 1) before rectification.
+        """
+        import numpy as np
+        from scipy.signal import fftconvolve
+        from numpy import apply_along_axis as apply
+        if not isinstance(threshold,(int,float)):
+            raise TypeError('threshold must be a number')
+        if not isinstance(filter_length,int) or filter_length &lt;= 0:
+            raise TypeError('filter_length must be a positive integer')
+        if not isinstance(minimal_dist,int) or minimal_dist &lt;= 0:
+            raise TypeError('minimal_dist must be a positive integer')
+        if not isinstance(not_zero,float) or not_zero &lt;= 0:
+            raise TypeError('not_zero must be a positive float')
+        target = self.normalize.box_filter(filter_length).rectify(threshold).get_data
+        if threshold &lt; 0:
+            target = -target.sum(0)
+        else:
+            target = target.sum(0)
+        dx = fftconvolve(target,np.array([1,0,-1])/2.,'same') 
+        dx[np.abs(dx) &lt; not_zero] = 0
+        dx = np.diff(np.sign(dx))
+        pos = np.arange(len(dx))[dx &lt; 0]
+        if return_dict:
+            return {"MCD_instance": self,
+                    "threshold": threshold,
+                    "filter_length": filter_length,
+                    "minimal_dist": minimal_dist,
+                    "not_zero": not_zero,
+                    "spike_positions": pos[:-1][np.diff(pos) &gt; minimal_dist]}
+        else:
+            return pos[:-1][np.diff(pos) &gt; minimal_dist]
 </pre>
 </div>
 </div>
@@ -2030,7 +2116,7 @@ We start with a <code>Class</code> that we call <code>MultiChannelData</code>. I
 
 <pre class="src src-python" id="DetectedSpikes-Class-definition">class DetectedSpikes:
     """Detected spikes."""
-    def __init__(self,MCD_instance,threshold=4,filter_length=3,channels=None,minimal_dist=15,not_zero=1e-3):
+    def __init__(self,MCD_instance,threshold=4,filter_length=3,minimal_dist=15,not_zero=1e-3,spike_positions=None):
         """Create a new DetectedSpikes instance.
 
         MCD_instance    a MultiChannelData instance
@@ -2038,10 +2124,10 @@ We start with a <code>Class</code> that we call <code>MultiChannelData</code>. I
                         (positive for peaks, negative for valleys)
         filter_length   a positive integer setting the length of the box filter used to 
                         filter the data prior to detection
-        channels        a list with the channels to use for detection
         minimal_dist    a positive integer, the minimal distance between two successive peaks
         not_zero        a positive float, the smallest value above which the absolute value of
                         the derivative is considered not null.
+        spike_positions an array with spike indexes or None.
         """
         import numpy as np
         from scipy.signal import fftconvolve
@@ -2056,87 +2142,89 @@ We start with a <code>Class</code> that we call <code>MultiChannelData</code>. I
             raise TypeError('minimal_dist must be a positive integer')
         if not isinstance(not_zero,float) or not_zero &lt;= 0:
             raise TypeError('not_zero must be a positive float')
-        if channels is None:
-            channels = range(MCD_instance._data.shape[0])
-        elif isinstance(channels,int):
-            channels = [channels]
+        if not spike_positions is None and not isinstance(spike_positions,np.ndarray):
+            raise TypeError('spike_positions must be an array')
         self._MCD = MCD_instance
-        self._threshold = threshold
-        self._filter_length = filter_length
-        self._channels = channels
-        self._minimal_dist = minimal_dist
-        self._not_zero = not_zero
-        data = MCD_instance.get_data().copy()[channels,:]
-        data_median = np.median(data,axis=1)
-        data = data-data_median.reshape(len(channels),1)
-        data_mad = np.median(np.abs(data),axis=1)*1.4826
-        data = data / data_mad.reshape(len(channels),1)
-        data_filtered = apply(lambda x:
-                              fftconvolve(x,np.ones(filter_length)/filter_length,'same'),
-                              1,data)
-        data_filtered_median = np.median(data_filtered,axis=1)
-        data_filtered = data_filtered-data_filtered_median.reshape(len(channels),1)
-        data_filtered_mad = np.median(np.abs(data_filtered),axis=1)*1.4826
-        data_filtered = data_filtered / data_filtered_mad.reshape(len(channels),1)
-        if threshold &lt; 0:
-            data_filtered[data_filtered &gt; threshold] = 0
-            data_filtered = -data_filtered.sum(0)
-        else:
-            data_filtered[data_filtered &lt; threshold] = 0
-            data_filtered = data_filtered.sum(0)
-        dx = fftconvolve(data_filtered,np.array([1,0,-1])/2.,'same') 
-        dx[np.abs(dx) &lt; not_zero] = 0
-        dx = np.diff(np.sign(dx))
-        pos = np.arange(len(dx))[dx &lt; 0]
-        self._spike_positions = pos[:-1][np.diff(pos) &gt; minimal_dist]
-        self._k = -1
+        self.threshold = threshold
+        self.filter_length = filter_length
+        self.minimal_dist = minimal_dist
+        self.not_zero = not_zero
+        if spike_positions is None:
+            spike_positions = MCD_instance.find_extrema(filter_length,threshold,minimal_dist,not_zero)
+        self.spike_positions = spike_positions
     def __len__(self):
         """Return the number of detected spikes."""
-        return len(self._spike_positions)
+        return len(self.spike_positions)
     def __str__(self):
         """Controls the printed version of the instance."""
         import numpy as np
         return "An instance of DetectedSpikes.\n" \
-            + "  Spikes were detected on " + str(len(self._channels)) + " channels simultaneously (" \
-            + str(list(self._channels)) + ").\n" \
-            + "  A boxe filter with length " + str(self._filter_length) + " was used.\n" \
-            + "  The detection threshold (multiple of the MAD) was set at " + str(self._threshold) + ".\n" \
-            + "  " + str(len(self._spike_positions)) + " putative spikes were detected. The smallest inter spike interval is: " \
-            + str(np.min(np.diff(self._spike_positions))) + ", and the largest is: " + str(np.max(np.diff(self._spike_positions))) \
-            + ".\n  The mean ISI is: " + str(int(np.mean(np.diff(self._spike_positions)))) + " and the ISI SD is: " \
-            + str(int(np.std(np.diff(self._spike_positions)))) + ".\n"
-    def __next__(self):
-        """Return the next element, or else raise StopIteration error."""
-        self._k += 1
-        if self._k &lt; len(self._spike_positions):
-            return self._spike_positions[self._k]
-        else:
-            raise StopIteration()
-    def __iter__(self):
-        """By convention, an iterator must return itself as an iterator."""
-        return self
-    def get_spike_positions(self):
-        """Return an array with the spike positions."""
-        return self._spike_positions
-    def plot(self,linewidth=0.2,color='black'):
+            + "  Spikes were detected on " + str(len(self._MCD.channel_names)) + " channels simultaneously " \
+            + str(self._MCD.channel_names) + ".\n" \
+            + "  A boxe filter with length " + str(self.filter_length) + " was used.\n" \
+            + "  The detection threshold (multiple of the MAD) was set at " + str(self.threshold) + ".\n" \
+            + "  " + str(len(self.spike_positions)) + " putative spikes were detected. The smallest inter spike interval is: " \
+            + str(np.min(np.diff(self.spike_positions))) + ", and the largest is: " + str(np.max(np.diff(self.spike_positions))) \
+            + ".\n  The mean ISI is: " + str(int(np.mean(np.diff(self.spike_positions)))) + " and the ISI SD is: " \
+            + str(int(np.std(np.diff(self.spike_positions)))) + ".\n"
+    def plot(self,linewidth=0.2,color='black',xlabel="Time (s)"):
         """Plot the data with the detected spikes."""
         import matplotlib.pyplot as plt
         import numpy as np
-        nb_chan = self._MCD.nb_channels()
+        nb_chan = self._MCD.get_data.shape[0]
         data_min = np.min(self._MCD._data,axis=1) 
         data_max = np.max(self._MCD._data,axis=1)
         display_offset = list(np.cumsum(np.array([0] +
                                                  [data_max[i]-data_min[i-1]
                                                   for i in range(1,nb_chan)])))
-        tt = np.arange(len(self._MCD))/self._MCD._sampling_rate+self._MCD._start
+        tt = np.arange(len(self._MCD))/self._MCD.sampling_rate+self._MCD.start
         for i in range(nb_chan):
             plt.plot(tt,self._MCD._data[i,:]-display_offset[i],
                      linewidth=linewidth,color=color)
-            plt.plot(tt[self._spike_positions],
-                     self._MCD._data[i,self._spike_positions]-display_offset[i],'ro')
+            plt.plot(tt[self.spike_positions],
+                     self._MCD._data[i,self.spike_positions]-display_offset[i],'ro')
         plt.yticks([])
-        plt.xlim([self._MCD._start,self._MCD._start+self._MCD.duration()])
-        plt.xlabel("Time (s)")
+        plt.xlim([self._MCD.start,self._MCD.start+self._MCD.duration])
+        plt.xlabel(xlabel)
+    def __getitem__(self,key):
+        """Return a new subsetted instance."""
+        spike_positions = self.spike_positions[key]
+        return DetectedSpikes(self._MCD,self.threshold,self.filter_length,self.minimal_dist,self.not_zero,spike_positions)
+    def mk_cuts(self,before=14, after=30,return_dict=False):
+        """Make cuts from the raw data 'centered' on spike positions and
+        return a matrix or a dictionnary with the cuts as well as all the parameters.
+
+        before      a positive integer specifying were the cut starts before the spike position
+        after       a positive integer specifying were the cut ends after the spike position
+        return_dict a boolean controlling the type of result
+        """
+        import numpy as np
+        if not isinstance(before,int) or before &lt;= 0:
+            raise TypeError('before must be a positive integer')
+        if not isinstance(after,int) or after &lt;= 0:
+            raise TypeError('after must be a positive integer')
+        ns,dl = self._MCD._data.shape
+        cl = before+after+1 ## The length of the cut
+        cs = cl*ns ## The 'size' of a cut
+        cut = np.zeros((ns,cl))
+        idx = np.arange(-before,after+1)
+        def cut_sgl_evt(evt_pos):
+            """Make a cut corresponding to a spike located at evt_pos."""
+            keep = idx + evt_pos
+            within = np.bitwise_and(0 &lt;= keep, keep &lt; dl)
+            kw = keep[within]
+            cut[:,within] = self._MCD._data[:,kw].copy()
+            return cut.reshape(cs)
+        res = np.zeros((len(self),(before+after+1)*ns))
+        for i,p in enumerate(self.spike_positions):
+            res[i,:] = cut_sgl_evt(p)
+        if return_dict:
+            return {"DS_instance": self,
+                    "before": before,
+                    "after": after,
+                    "cuts": res}
+        else:
+            return res
 </pre>
 </div>
 </div>
@@ -2153,12 +2241,13 @@ We start with a <code>Class</code> that we call <code>MultiChannelData</code>. I
 
 <pre class="src src-python" id="Sample-Class-definition">class Sample:
     """Events' sample: a collection of cuts around detected spikes."""
-    def __init__(self, DS_instance, before=14, after=30):
+    def __init__(self, DS_instance, before=14, after=30, cuts=None):
         """Create a new Sample instance.
 
         DS_instance a DetectedSpikes instance
         before a positive integer specifying were the cut starts before the spike position
         after  a positive integer specifying were the cut ends after the spike position
+        cuts   a matrix of cuts or None
         """
         import numpy as np
         if not isinstance(DS_instance,DetectedSpikes):
@@ -2167,51 +2256,50 @@ We start with a <code>Class</code> that we call <code>MultiChannelData</code>. I
             raise TypeError('before must be a positive integer')
         if not isinstance(after,int) or after &lt;= 0:
             raise TypeError('after must be a positive integer')
-        ns,dl = DS_instance._MCD._data.shape
-        cl = before+after+1 ## The length of the cut
-        cs = cl*ns ## The 'size' of a cut
-        cut = np.zeros((ns,cl))
-        idx = np.arange(-before,after+1)
-        def cut_sgl_evt(evt_pos):
-            """Make a cut corresponding to a spike located at evt_pos."""
-            keep = idx + evt_pos
-            within = np.bitwise_and(0 &lt;= keep, keep &lt; dl)
-            kw = keep[within]
-            cut[:,within] = DS_instance._MCD._data[:,kw].copy()
-            return cut.reshape(cs)
-        res = np.zeros((len(DS_instance),(before+after+1)*ns))
-        for i,p in enumerate(DS_instance.get_spike_positions()):
-            res[i,:] = cut_sgl_evt(p)
-        self._data = res
-        self._before = before
-        self._after = after
+        if not cuts is None and not isinstance(cuts,np.ndarray):
+            raise TypeError('cuts must be an array')
+        if cuts is None:
+            cuts = DS_instance.mk_cuts(before,after)
+        if not cuts.shape == (len(DS_instance),DS_instance._MCD.get_data.shape[0]*(before+after+1)):
+            raise ValueError('cuts must be a matrix with ' + str(len(DS_instance)) + ' rows and '\
+                             + str(DS_instance._MCD.get_data.shape[0]*(before+after+1)) + ' columns')
+        self._cuts = cuts
+        self.before = before
+        self.after = after
         self._DS = DS_instance
+    @property
     def shape(self):
         """The shape."""
-        return self._data.shape
-    def get_data(self):
+        return self._cuts.shape
+    @property
+    def get_cuts(self):
         """Get the data."""
-        return self._data
+        return self._cuts
+    @property
     def mean(self):
         """Mean sample member."""
         import numpy as np
-        return np.mean(self._data,axis=0)
+        return np.mean(self._cuts,axis=0)
+    @property
     def median(self):
         """Median sample member."""
         import numpy as np
-        return np.median(self._data,axis=0)
+        return np.median(self._cuts,axis=0)
+    @property
     def mad(self):
         """Sample's MAD."""
         import numpy as np
-        return np.median(np.abs(self._data - self.median().reshape(1,self.shape()[1])),axis=0)*1.4826
+        return np.median(np.abs(self._cuts - self.median.reshape(1,self.shape[1])),axis=0)*1.4826
+    @property
     def std(self):
         """Sample's STD."""
         import numpy as np
-        return np.std(self._data,axis=0)
+        return np.std(self._cuts,axis=0)
+    @property
     def var(self):
         """Sample's variance."""
         import numpy as np
-        return np.var(self._data,axis=0)
+        return np.var(self._cuts,axis=0)
     def plot(self,events_color='black',events_lw=0.1,
              show_median=True,median_color='red',
              median_lw=1,show_mad=True,
@@ -2230,23 +2318,26 @@ We start with a <code>Class</code> that we call <code>MultiChannelData</code>. I
         import numpy as np
         import matplotlib.pylab as plt
         n_channels = self._DS._MCD._data.shape[0]
-        cut_length = self._before + self._after + 1
-        for i in range(self.shape()[0]):
-            plt.plot(self.get_data()[i,:], color=events_color, lw=events_lw)
+        cut_length = self.before + self.after + 1
+        for i in range(self.shape[0]):
+            plt.plot(self._cuts[i,:], color=events_color, lw=events_lw)
         if show_median:
-            MEDIAN = self.median()
-            plt.plot(MEDIAN, color=median_color, lw=median_lw)
+            plt.plot(self.median, color=median_color, lw=median_lw)
         if show_mad:
-            MAD = self.mad() + np.repeat(self._DS._MCD.median(),cut_length)
+            MAD = self.mad + np.repeat(self._DS._MCD.median,cut_length)
             plt.plot(MAD, color=mad_color, lw=mad_lw)
         left_boundary = np.arange(cut_length,
-                                  self.shape()[1],
+                                  self.shape[1],
                                   cut_length*2)
         for l in left_boundary:
             plt.axvspan(l,l+cut_length-1,
                         facecolor='grey',alpha=0.5,edgecolor='none')
         plt.xticks([])
-        plt.ylim([np.min(self.get_data()),np.max(self.get_data())])
+        plt.ylim([np.min(self.get_cuts),np.max(self.get_cuts)])
+    def __getitem__(self,key):
+        """Return a new subsetted instance."""
+        cuts = self._cuts[key]
+        return Sample(self._DS[key[0]],self.before,self.after,cuts)
 </pre>
 </div>
 </div>
@@ -2292,7 +2383,7 @@ Christophe Pouzat. (2015). PouzatDetorakisEuroScipy2014: Complet avec référenc
 </div></div>
 <div id="postamble" class="status">
 <p class="author">Author: Christophe Pouzat</p>
-<p class="date">Created: 2015-07-30 jeu. 17:10</p>
+<p class="date">Created: 2015-07-31 ven. 17:56</p>
 <p class="creator">Emacs 24.5.1 (Org mode 8.2.10)</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
