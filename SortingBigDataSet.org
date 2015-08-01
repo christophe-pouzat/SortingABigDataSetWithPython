@@ -1667,7 +1667,32 @@ At that stage we want to take the next epoch of 29 seconds of spontaneous activi
 
 ** MultiChannelData Class
 
-We start with a =Class= that we call =MultiChannelData=. In general we think of using it to store and display multi-channel data (like data from a tetrode), but we will design it to work with single channel data as well.
+We start with a =Class= that we call =MultiChannelData=. In general we think of using it to store and display multi-channel data (like data from a tetrode), but we will design it to work with single channel data as well. The class objects have the following attributes:
++ =data=: an alias (pointer) to the data stored a =numpy= matrix with as many rows as channels and as many columns as sampling points.
++ =start=: the time (in seconds) of the first sampling point.
++ =sampling_rate=: the sampling rate in Hz.
++ =channel_names=: a list of strings with the channel names.
++ =nb_channels=: the number of channels.
++ =duration=: the data length (in seconds) referred to by the object.
++ =median=: a vector with as many elements as channels containing the median computed on each channel.
++ =mad=: a vector with as many elements as channels containing the median absolute deviation computed on each channel.
++ =mean=: a vector with as many elements as channels containing the mean computed on each channel.
++ =std=: a vector with as many elements as channels containing the standard deviation computed on each channel.
++ =variance=: a vector with as many elements as channels containing the variance computed on each channel.
+The following methods can be called:
++ =sample2time=: given a sample point, returns the corresponding time.
++ =time2sample=: given a time, returns a sampling point.
++ =quantiles=: given a vector of probabilities, returns a vector with the corresponding empirical quantiles.
++ =copy=: returns a new instance / object of =MultiChannelData= containing a copy of the original object (the data referred to are then actually copied).
++ =plot=: create a plot showing the data.
++ =offset=: given a vector with as many elements as recording channels, returns a new instance / object of =MultiChannelData= containing a copy of the original object where the data referred to have been copied and offset.
++ =scale=:  given a vector with as many elements as recording channels, returns a new instance / object of =MultiChannelData= containing a copy of the original object where the data referred to have been copied and scaled.
++ =normalize=: returns a new instance / object of =MultiChannelData= containing a copy of the original object where the data referred to have been copied offset by the median and scaled by the MAD.
++ =derivative=: returns a new instance / object of =MultiChannelData= containing a copy of the original object where the data referred to have been copied and differentiated using the central difference and using the sampling period as a time unit.
++ =box_filter=: returns a new instance / object of =MultiChannelData= containing a copy of the original object where the data referred to have been copied and box filtered.
++ =rectify=: returns a new instance / object of =MultiChannelData= containing a copy of the original object where the data referred to have been copied and rectified.
++ =find_extrema=: returns a vector or a dictionary containing local extrema locations.
+A length (=len=) special method is defined and subsetting can be performed on the object like on a "classical" matrix.  
 
 #+NAME: MultiChannelData-Class-defintion
 #+BEGIN_SRC python :session *Python* :results silent
@@ -1708,7 +1733,7 @@ class MultiChannelData:
         """Return number of samples."""
         return self.length
     @property
-    def get_data(self):
+    def data(self):
         """Extract the actual data."""
         return self._data
     def sample2time(self,sample_point):
@@ -1842,7 +1867,7 @@ class MultiChannelData:
         are normalized first (median set at 0 and MAD at 1).
         """
         import numpy as np
-        rect_data = self.normalize.get_data
+        rect_data = self.normalize.data
         if threshold < 0:
             rect_data[rect_data > threshold] = 0
         else:
@@ -1875,7 +1900,7 @@ class MultiChannelData:
             raise TypeError('minimal_dist must be a positive integer')
         if not isinstance(not_zero,float) or not_zero <= 0:
             raise TypeError('not_zero must be a positive float')
-        target = self.normalize.box_filter(filter_length).rectify(threshold).get_data
+        target = self.normalize.box_filter(filter_length).rectify(threshold).data
         if threshold < 0:
             target = -target.sum(0)
         else:
@@ -1895,6 +1920,113 @@ class MultiChannelData:
             return pos[:-1][np.diff(pos) > minimal_dist]
 
 #+END_SRC
+
+*** Example of use
+
+We could get the equivalent of our previous =data= list with:
+
+#+NAME: MultiChannelData-instanciation-example
+#+BEGIN_SRC python :session *Python* :results silent
+Data = MultiChannelData([hdf['Continuous_1']['trial_01'][name][...] for name in ['ch09','ch11','ch13','ch16']],
+                        ['ch09','ch11','ch13','ch16'])
+#+END_SRC
+
+We can then get the five-number summary with:
+
+#+NAME: MultiChannelData-quantiles-example
+#+BEGIN_SRC python :session *Python* :exports both
+Data.quantiles()
+#+END_SRC
+
+#+RESULTS: MultiChannelData-quantiles-example
+|  967 | 2016 | 2057 | 2097 | 2443 |
+| 1370 | 2020 | 2057 | 2093 | 2654 |
+| 1128 | 2013 | 2059 | 2103 | 2451 |
+| 1767 | 2021 | 2057 | 2092 | 2300 |
+
+The documentation of the =plot= method can be obtained with:
+
+#+NAME: MultiChannelData-plot-doc
+#+BEGIN_SRC python :session *Python* :exports both :results output
+help(Data.plot)
+#+END_SRC
+
+#+RESULTS: MultiChannelData-plot-doc
+: Help on method plot in module __main__:
+: 
+: plot(linewidth=0.2, color='black', xlabel='Time (s)') method of __main__.MultiChannelData instance
+:     Plot the data.
+: 
+: 
+
+Making a plot is rather easy (result not shown):
+
+#+NAME: MultiChannelData-plot-example
+#+BEGIN_SRC python :session *Python* :eval no-export
+Data.plot()
+#+END_SRC
+
+#+RESULTS: MultiChannelData-plot-example
+
+Making a plot showing the first channel only is done with (results not shown):
+
+#+NAME: MultiChannelData-subset-and-plot-example
+#+BEGIN_SRC python :session *Python* :eval no-export
+Data[0,:].plot()
+#+END_SRC
+
+#+RESULTS: MultiChannelData-subset-and-plot-example
+
+The median is obtained with:
+
+#+NAME: MultiChannelData-median-example
+#+BEGIN_SRC python :session *Python* :exports both
+Data.median
+#+END_SRC
+
+#+RESULTS: MultiChannelData-median-example
+| 2057 | 2057 | 2059 | 2057 |
+
+And the MAD with:
+
+#+NAME: MultiChannelData-MAD-example
+#+BEGIN_SRC python :session *Python* :exports both
+Data.mad
+#+END_SRC
+
+#+RESULTS: MultiChannelData-MAD-example
+| 59.304 | 54.856 | 66.717 | 53.374 |
+
+A graph showing for a normalized version of the first recording site:
++ the raw data (black),
++ the first derivative (red),
++ the box-filtered version of the raw data with a filter length of 3 points (blue),
++ a rectified version of the latter setting everything above 3 to 0 (orange),
+is obtained with:
+
+#+NAME: MultiChannelData-subset-and-plot-example2
+#+BEGIN_SRC python :session *Python* :results silent
+Data[0,Data.time2sample(4.28):Data.time2sample(4.3)].normalize.plot(color='black',linewidth=2)
+Data[0,Data.time2sample(4.28):Data.time2sample(4.3)].normalize.derivative.plot(color='red',linewidth=2)
+Data[0,Data.time2sample(4.28):Data.time2sample(4.3)].normalize.box_filter(3).plot(color='blue',linewidth=2)
+Data[0,Data.time2sample(4.28):Data.time2sample(4.3)].normalize.box_filter(3).rectify(-3).plot(color='orange',linewidth=1)
+plt.yticks(range(-15,10,5))
+plt.ylim([-15,7])
+plt.grid()
+#+END_SRC
+
+#+NAME: MultiChannelData-subset-and-plot-example2-fig
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/MultiChannelData-subset-and-plot-example2.png")
+plt.close()
+"img/MultiChannelData-subset-and-plot-example2.png"
+#+END_SRC
+
+#+CAPTION: Example of use of =subsetting= / =time2sample= / =normalize= / =derivative= / =box_filter= / =rectify= methods for MultiChannelData objects.
+#+ATTR_LATEX: :width 1.0\textwidth
+#+NAME: fig:MultiChannelData-subset-and-plot-example2-fig
+#+RESULTS: MultiChannelData-subset-and-plot-example2-fig
+[[file:img/MultiChannelData-subset-and-plot-example2.png]]
 
 ** DetectedSpikes Class
 
@@ -1959,7 +2091,7 @@ class DetectedSpikes:
         """Plot the data with the detected spikes."""
         import matplotlib.pyplot as plt
         import numpy as np
-        nb_chan = self._MCD.get_data.shape[0]
+        nb_chan = self._MCD.data.shape[0]
         data_min = np.min(self._MCD._data,axis=1) 
         data_max = np.max(self._MCD._data,axis=1)
         display_offset = list(np.cumsum(np.array([0] +
@@ -2043,9 +2175,9 @@ class Sample:
             raise TypeError('cuts must be an array')
         if cuts is None:
             cuts = DS_instance.mk_cuts(before,after)
-        if not cuts.shape == (len(DS_instance),DS_instance._MCD.get_data.shape[0]*(before+after+1)):
+        if not cuts.shape == (len(DS_instance),DS_instance._MCD.data.shape[0]*(before+after+1)):
             raise ValueError('cuts must be a matrix with ' + str(len(DS_instance)) + ' rows and '\
-                             + str(DS_instance._MCD.get_data.shape[0]*(before+after+1)) + ' columns')
+                             + str(DS_instance._MCD.data.shape[0]*(before+after+1)) + ' columns')
         self._cuts = cuts
         self.before = before
         self.after = after

@@ -4,7 +4,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
 <title>Sorting a Big Data Set With Python</title>
-<!-- 2015-07-31 ven. 17:56 -->
+<!-- 2015-08-01 sam. 17:35 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="generator" content="Org-mode" />
 <meta  name="author" content="Christophe Pouzat" />
@@ -246,7 +246,11 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#sec-5">5. Defining classes and methods for a systematic analysis of the remaining of the experiment</a>
 <ul>
-<li><a href="#sec-5-1">5.1. MultiChannelData Class</a></li>
+<li><a href="#sec-5-1">5.1. MultiChannelData Class</a>
+<ul>
+<li><a href="#sec-5-1-1">5.1.1. Example of use</a></li>
+</ul>
+</li>
 <li><a href="#sec-5-2">5.2. DetectedSpikes Class</a></li>
 <li><a href="#sec-5-3">5.3. Sample Class</a></li>
 </ul>
@@ -1873,7 +1877,63 @@ At that stage we want to take the next epoch of 29 seconds of spontaneous activi
 <h3 id="sec-5-1"><span class="section-number-3">5.1</span> MultiChannelData Class</h3>
 <div class="outline-text-3" id="text-5-1">
 <p>
-We start with a <code>Class</code> that we call <code>MultiChannelData</code>. In general we think of using it to store and display multi-channel data (like data from a tetrode), but we will design it to work with single channel data as well.
+We start with a <code>Class</code> that we call <code>MultiChannelData</code>. In general we think of using it to store and display multi-channel data (like data from a tetrode), but we will design it to work with single channel data as well. The class objects have the following attributes:
+</p>
+<ul class="org-ul">
+<li><code>data</code>: an alias (pointer) to the data stored a <code>numpy</code> matrix with as many rows as channels and as many columns as sampling points.
+</li>
+<li><code>start</code>: the time (in seconds) of the first sampling point.
+</li>
+<li><code>sampling_rate</code>: the sampling rate in Hz.
+</li>
+<li><code>channel_names</code>: a list of strings with the channel names.
+</li>
+<li><code>nb_channels</code>: the number of channels.
+</li>
+<li><code>duration</code>: the data length (in seconds) referred to by the object.
+</li>
+<li><code>median</code>: a vector with as many elements as channels containing the median computed on each channel.
+</li>
+<li><code>mad</code>: a vector with as many elements as channels containing the median absolute deviation computed on each channel.
+</li>
+<li><code>mean</code>: a vector with as many elements as channels containing the mean computed on each channel.
+</li>
+<li><code>std</code>: a vector with as many elements as channels containing the standard deviation computed on each channel.
+</li>
+<li><code>variance</code>: a vector with as many elements as channels containing the variance computed on each channel.
+</li>
+</ul>
+<p>
+The following methods can be called:
+</p>
+<ul class="org-ul">
+<li><code>sample2time</code>: given a sample point, returns the corresponding time.
+</li>
+<li><code>time2sample</code>: given a time, returns a sampling point.
+</li>
+<li><code>quantiles</code>: given a vector of probabilities, returns a vector with the corresponding empirical quantiles.
+</li>
+<li><code>copy</code>: returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object (the data referred to are then actually copied).
+</li>
+<li><code>plot</code>: create a plot showing the data.
+</li>
+<li><code>offset</code>: given a vector with as many elements as recording channels, returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied and offset.
+</li>
+<li><code>scale</code>:  given a vector with as many elements as recording channels, returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied and scaled.
+</li>
+<li><code>normalize</code>: returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied offset by the median and scaled by the MAD.
+</li>
+<li><code>derivative</code>: returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied and differentiated using the central difference and using the sampling period as a time unit.
+</li>
+<li><code>box_filter</code>: returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied and box filtered.
+</li>
+<li><code>rectify</code>: returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied and rectified.
+</li>
+<li><code>find_extrema</code>: returns a vector or a dictionary containing local extrema locations.
+</li>
+</ul>
+<p>
+A length (<code>len</code>) special method is defined and subsetting can be performed on the object like on a "classical" matrix.  
 </p>
 
 <div class="org-src-container">
@@ -1915,7 +1975,7 @@ We start with a <code>Class</code> that we call <code>MultiChannelData</code>. I
         """Return number of samples."""
         return self.length
     @property
-    def get_data(self):
+    def data(self):
         """Extract the actual data."""
         return self._data
     def sample2time(self,sample_point):
@@ -2049,7 +2109,7 @@ We start with a <code>Class</code> that we call <code>MultiChannelData</code>. I
         are normalized first (median set at 0 and MAD at 1).
         """
         import numpy as np
-        rect_data = self.normalize.get_data
+        rect_data = self.normalize.data
         if threshold &lt; 0:
             rect_data[rect_data &gt; threshold] = 0
         else:
@@ -2082,7 +2142,7 @@ We start with a <code>Class</code> that we call <code>MultiChannelData</code>. I
             raise TypeError('minimal_dist must be a positive integer')
         if not isinstance(not_zero,float) or not_zero &lt;= 0:
             raise TypeError('not_zero must be a positive float')
-        target = self.normalize.box_filter(filter_length).rectify(threshold).get_data
+        target = self.normalize.box_filter(filter_length).rectify(threshold).data
         if threshold &lt; 0:
             target = -target.sum(0)
         else:
@@ -2101,6 +2161,218 @@ We start with a <code>Class</code> that we call <code>MultiChannelData</code>. I
         else:
             return pos[:-1][np.diff(pos) &gt; minimal_dist]
 </pre>
+</div>
+</div>
+
+<div id="outline-container-sec-5-1-1" class="outline-4">
+<h4 id="sec-5-1-1"><span class="section-number-4">5.1.1</span> Example of use</h4>
+<div class="outline-text-4" id="text-5-1-1">
+<p>
+We could get the equivalent of our previous <code>data</code> list with:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="MultiChannelData-instanciation-example">Data = MultiChannelData([hdf['Continuous_1']['trial_01'][name][...] for name in ['ch09','ch11','ch13','ch16']],
+                        ['ch09','ch11','ch13','ch16'])
+</pre>
+</div>
+
+<p>
+We can then get the five-number summary with:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="MultiChannelData-quantiles-example">Data.quantiles()
+</pre>
+</div>
+
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="right" />
+
+<col  class="right" />
+
+<col  class="right" />
+
+<col  class="right" />
+
+<col  class="right" />
+</colgroup>
+<tbody>
+<tr>
+<td class="right">967</td>
+<td class="right">2016</td>
+<td class="right">2057</td>
+<td class="right">2097</td>
+<td class="right">2443</td>
+</tr>
+
+<tr>
+<td class="right">1370</td>
+<td class="right">2020</td>
+<td class="right">2057</td>
+<td class="right">2093</td>
+<td class="right">2654</td>
+</tr>
+
+<tr>
+<td class="right">1128</td>
+<td class="right">2013</td>
+<td class="right">2059</td>
+<td class="right">2103</td>
+<td class="right">2451</td>
+</tr>
+
+<tr>
+<td class="right">1767</td>
+<td class="right">2021</td>
+<td class="right">2057</td>
+<td class="right">2092</td>
+<td class="right">2300</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+The documentation of the <code>plot</code> method can be obtained with:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="MultiChannelData-plot-doc">help(Data.plot)
+</pre>
+</div>
+
+<pre class="example">
+Help on method plot in module __main__:
+
+plot(linewidth=0.2, color='black', xlabel='Time (s)') method of __main__.MultiChannelData instance
+    Plot the data.
+</pre>
+
+<p>
+Making a plot is rather easy (result not shown):
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="MultiChannelData-plot-example">Data.plot()
+</pre>
+</div>
+
+<p>
+Making a plot showing the first channel only is done with (results not shown):
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="MultiChannelData-subset-and-plot-example">Data[0,:].plot()
+</pre>
+</div>
+
+<p>
+The median is obtained with:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="MultiChannelData-median-example">Data.median
+</pre>
+</div>
+
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="right" />
+
+<col  class="right" />
+
+<col  class="right" />
+
+<col  class="right" />
+</colgroup>
+<tbody>
+<tr>
+<td class="right">2057</td>
+<td class="right">2057</td>
+<td class="right">2059</td>
+<td class="right">2057</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+And the MAD with:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="MultiChannelData-MAD-example">Data.mad
+</pre>
+</div>
+
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="right" />
+
+<col  class="right" />
+
+<col  class="right" />
+
+<col  class="right" />
+</colgroup>
+<tbody>
+<tr>
+<td class="right">59.304</td>
+<td class="right">54.856</td>
+<td class="right">66.717</td>
+<td class="right">53.374</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+A graph showing for a normalized version of the first recording site:
+</p>
+<ul class="org-ul">
+<li>the raw data (black),
+</li>
+<li>the first derivative (red),
+</li>
+<li>the box-filtered version of the raw data with a filter length of 3 points (blue),
+</li>
+<li>a rectified version of the latter setting everything above 3 to 0 (orange),
+</li>
+</ul>
+<p>
+is obtained with:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="MultiChannelData-subset-and-plot-example2">Data[0,Data.time2sample(4.28):Data.time2sample(4.3)].normalize.plot(color='black',linewidth=2)
+Data[0,Data.time2sample(4.28):Data.time2sample(4.3)].normalize.derivative.plot(color='red',linewidth=2)
+Data[0,Data.time2sample(4.28):Data.time2sample(4.3)].normalize.box_filter(3).plot(color='blue',linewidth=2)
+Data[0,Data.time2sample(4.28):Data.time2sample(4.3)].normalize.box_filter(3).rectify(-3).plot(color='orange',linewidth=1)
+plt.yticks(range(-15,10,5))
+plt.ylim([-15,7])
+plt.grid()
+</pre>
+</div>
+
+
+<div id="fig:MultiChannelData-subset-and-plot-example2-fig" class="figure">
+<p><img src="img/MultiChannelData-subset-and-plot-example2.png" alt="MultiChannelData-subset-and-plot-example2.png" />
+</p>
+<p><span class="figure-number">Figure 20:</span> Example of use of <code>subsetting</code> / <code>time2sample</code> / <code>normalize</code> / <code>derivative</code> / <code>box_filter</code> / <code>rectify</code> methods for MultiChannelData objects.</p>
+</div>
 </div>
 </div>
 </div>
@@ -2171,7 +2443,7 @@ We start with a <code>Class</code> that we call <code>MultiChannelData</code>. I
         """Plot the data with the detected spikes."""
         import matplotlib.pyplot as plt
         import numpy as np
-        nb_chan = self._MCD.get_data.shape[0]
+        nb_chan = self._MCD.data.shape[0]
         data_min = np.min(self._MCD._data,axis=1) 
         data_max = np.max(self._MCD._data,axis=1)
         display_offset = list(np.cumsum(np.array([0] +
@@ -2260,9 +2532,9 @@ We start with a <code>Class</code> that we call <code>MultiChannelData</code>. I
             raise TypeError('cuts must be an array')
         if cuts is None:
             cuts = DS_instance.mk_cuts(before,after)
-        if not cuts.shape == (len(DS_instance),DS_instance._MCD.get_data.shape[0]*(before+after+1)):
+        if not cuts.shape == (len(DS_instance),DS_instance._MCD.data.shape[0]*(before+after+1)):
             raise ValueError('cuts must be a matrix with ' + str(len(DS_instance)) + ' rows and '\
-                             + str(DS_instance._MCD.get_data.shape[0]*(before+after+1)) + ' columns')
+                             + str(DS_instance._MCD.data.shape[0]*(before+after+1)) + ' columns')
         self._cuts = cuts
         self.before = before
         self.after = after
@@ -2383,7 +2655,7 @@ Christophe Pouzat. (2015). PouzatDetorakisEuroScipy2014: Complet avec référenc
 </div></div>
 <div id="postamble" class="status">
 <p class="author">Author: Christophe Pouzat</p>
-<p class="date">Created: 2015-07-31 ven. 17:56</p>
+<p class="date">Created: 2015-08-01 sam. 17:35</p>
 <p class="creator">Emacs 24.5.1 (Org mode 8.2.10)</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
