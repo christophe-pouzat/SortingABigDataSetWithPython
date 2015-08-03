@@ -1679,6 +1679,7 @@ We start with a =Class= that we call =MultiChannelData=. In general we think of 
 + =mean=: a vector with as many elements as channels containing the mean computed on each channel.
 + =std=: a vector with as many elements as channels containing the standard deviation computed on each channel.
 + =variance=: a vector with as many elements as channels containing the variance computed on each channel.
++ =ptp=: a vector with as many elements as channels containing the peak to peak difference computed on each channel.
 The following methods can be called:
 + =sample2time=: given a sample point, returns the corresponding time.
 + =time2sample=: given a time, returns a sampling point.
@@ -1692,7 +1693,7 @@ The following methods can be called:
 + =box_filter=: returns a new instance / object of =MultiChannelData= containing a copy of the original object where the data referred to have been copied and box filtered.
 + =rectify=: returns a new instance / object of =MultiChannelData= containing a copy of the original object where the data referred to have been copied and rectified.
 + =find_extrema=: returns a vector or a dictionary containing local extrema locations.
-A length (=len=) special method is defined and subsetting can be performed on the object like on a "classical" matrix.  
+A length (=len=) special method is defined, a =print= special method is defined returning a short written summary of the instance content and subsetting can be performed on the object like on a "classical" matrix.  
 
 #+NAME: MultiChannelData-Class-defintion
 #+BEGIN_SRC python :session *Python* :results silent
@@ -1806,11 +1807,48 @@ class MultiChannelData:
         """Return variance of each channel."""
         import numpy as np
         return np.var(self._data,axis=1)
+    @property
+    def ptp(self):
+        """Return peak to peak difference of each channel."""
+        import numpy as np
+        return np.ptp(self._data,axis=1)
     def copy(self):
         """Return a new instance that is a copy of the present one."""
         return MultiChannelData(self._data.copy(),self.channel_names,self.start,self.sampling_rate)
     def __getitem__(self,key):
         """Return a new subsetted instance."""
+        if isinstance(key,int):
+            foo = self.data.__getitem__(key)
+            return MultiChannelData(foo,[self.channel_names[key]],self.start,self.sampling_rate)
+        if isinstance(key,str):
+            key = self.channel_names.index(key)
+            foo = self.data.__getitem__(key)
+            return MultiChannelData(foo,[self.channel_names[key]],self.start,self.sampling_rate)
+        if isinstance(key,list):
+            if all([n in self.channel_names for n in key]):
+                key = [self.channel_names.index(n) for n in key]
+            if all([n in list(range(len(self.channel_names))) for n in key]):
+                foo = self.data.__getitem__(key)
+                return MultiChannelData(foo,[self.channel_names[n] for n in key],self.start,self.sampling_rate)
+        if isinstance(key,tuple):
+            if len(key) == 1:
+                key = key[0]
+                if isinstance(key,int):
+                    foo = self.data.__getitem__(key)
+                    return MultiChannelData(foo,[self.channel_names[key]],self.start,self.sampling_rate)
+                if isinstance(key,str):
+                    key = self.channel_names.index(key)
+                    foo = self.data.__getitem__(key)
+                    return MultiChannelData(foo,[self.channel_names[key]],self.start,self.sampling_rate)
+                if isinstance(key,list):
+                    if all([n in self.channel_names for n in key]):
+                        key = [self.channel_names.index(n) for n in key]
+                    if all([n in list(range(len(self.channel_names))) for n in key]):
+                        foo = self.data.__getitem__(key)
+                        return MultiChannelData(foo,[self.channel_names[n] for n in key],self.start,self.sampling_rate)
+                else:
+                    foo = self.data.__getitem__(key)
+                    return MultiChannelData(foo,self.channel_names[key[0]],self.start,self.sampling_rate)
         if not len(key) == 2:
             raise ValueError('key must select along both dimensions')
         if isinstance(key[1],slice) and not key[1].step is None:
@@ -1824,7 +1862,25 @@ class MultiChannelData:
             begin = key[1].start/self.sampling_rate+self.start
         else:
             begin = key[1][0]/self.sampling_rate+self.start
-        return MultiChannelData(foo,self.channel_names[key[0]],begin,self.sampling_rate)
+        if isinstance(key[0],slice) or isinstance(key[0],int):
+            channel_names = self.channel_names[key[0]]
+        elif isinstance(key[0],str):
+            channel_names = [key[0]]
+        elif all([n in self.channel_names for n in key[0]]):
+            channel_names = key[0]
+        else:
+            channel_names = [self.channel_names[n] for n in key[0]]
+        return MultiChannelData(foo,channel_names,begin,self.sampling_rate)
+    def __str__(self):
+        """Controls the printed version of the instance."""
+        import numpy as np
+        return "An instance of MultiChannelData.\n" \
+            + "  It is built from channels: " + str(self.channel_names) +".\n" \
+            + "  The number of sampling points is: " + str(len(self)) + " and the sampling rate is: " \
+            + str(self.sampling_rate) + " (Hz).\n" \
+            + "  The five number summary for each channel is:\n" \
+            + str(self.quantiles()) + "\n" \
+            + "  The MAD of each channel is:\n" + str(self.mad) + "\n"
     def plot(self,linewidth=0.2,color='black',xlabel="Time (s)"):
         """Plot the data."""
         import matplotlib.pyplot as plt
@@ -1931,10 +1987,41 @@ Data = MultiChannelData([hdf['Continuous_1']['trial_01'][name][...] for name in 
                         ['ch09','ch11','ch13','ch16'])
 #+END_SRC
 
-We can then get the five-number summary with:
+We can then get a short written summary of the instance content with:
+
+#+NAME: MultiChannelData-print-example
+#+BEGIN_SRC python :session *Python* :exports both :results output
+print(Data)
+#+END_SRC
+
+#+RESULTS: MultiChannelData-print-example
+#+begin_example
+An instance of MultiChannelData.
+  It is built from channels: ['ch09', 'ch11', 'ch13', 'ch16'].
+  The number of sampling points is: 431548 and the sampling rate is: 15000 (Hz).
+  The five number summary for each channel is:
+[[  967.  2016.  2057.  2097.  2443.]
+ [ 1370.  2020.  2057.  2093.  2654.]
+ [ 1128.  2013.  2059.  2103.  2451.]
+ [ 1767.  2021.  2057.  2092.  2300.]]
+  The MAD of each channel is:
+[ 59.304   54.8562  66.717   53.3736]
+#+end_example
+
+The peak to peak difference is obtained with:
+
+#+NAME: MultiChannelData-ptp-example
+#+BEGIN_SRC python :session *Python* :exports both
+Data.ptp
+#+END_SRC
+
+#+RESULTS: MultiChannelData-ptp-example
+| 1476 | 1284 | 1323 | 533 |
+
+We could get the five-number summary with (not shown):
 
 #+NAME: MultiChannelData-quantiles-example
-#+BEGIN_SRC python :session *Python* :exports both
+#+BEGIN_SRC python :session *Python* :exports code
 Data.quantiles()
 #+END_SRC
 
@@ -1977,20 +2064,20 @@ Data[0,:].plot()
 
 #+RESULTS: MultiChannelData-subset-and-plot-example
 
-The median is obtained with:
+The median could be obtained with (result not shown):
 
 #+NAME: MultiChannelData-median-example
-#+BEGIN_SRC python :session *Python* :exports both
+#+BEGIN_SRC python :session *Python* :exports code
 Data.median
 #+END_SRC
 
 #+RESULTS: MultiChannelData-median-example
 | 2057 | 2057 | 2059 | 2057 |
 
-And the MAD with:
+And the MAD with (result not shown):
 
 #+NAME: MultiChannelData-MAD-example
-#+BEGIN_SRC python :session *Python* :exports both
+#+BEGIN_SRC python :session *Python* :exports code
 Data.mad
 #+END_SRC
 
@@ -2030,24 +2117,34 @@ plt.close()
 
 ** DetectedSpikes Class
 
-=Class= =DetectedSpikes= will store the spikes (local maxima or minima) detection results.
+Instances of =class= =DetectedSpikes= will store the spikes (local maxima or minima) detection results. They are essentially vectors of sampling points with the following attributes:
++ =spike_positions=: a vector containing the positions (in sampling points) of the detected spikes.
++ =threshold=: the detection threshold used as a multiple of the MAD on each site. If positive respectively negative, peaks respectively valley are detected.
++ =filter_length=: an odd positive integer, the length of the box filter applied to the data prior to extrema detection.
++ =minimal_dist=: a positive integer, the minimal distance between two successive peaks. When to peak are found within this minimal distance, the first is kept (superposed events are resolved as such subsequently).
++ =not_zero=: a positive float, the smallest value above which the absolute value of the derivative is considered not null (a "technical" parameter used to cope with precision loss during numerical computation).  
+The following methods are available:
++ =plot=: generates a graph of the raw data with the detected spikes superposed (appearing as red disks).
++ =mk_cuts=: generates a matrix or a dictionary containing the cuts, that is portions of the raw data with the spike located at a given position within the cut.
+A length (=len=) special method is defined, a =print= special method is defined returning a short written summary of the instance content and subsetting can be performed on the object like on a "classical" vector.   
 
 #+NAME: DetectedSpikes-Class-definition
 #+BEGIN_SRC python :session *Python* :results silent
 class DetectedSpikes:
     """Detected spikes."""
-    def __init__(self,MCD_instance,threshold=4,filter_length=3,minimal_dist=15,not_zero=1e-3,spike_positions=None):
+    def __init__(self,MCD_instance,channels4detection=None,threshold=4,filter_length=3,minimal_dist=15,not_zero=1e-3,spike_positions=None):
         """Create a new DetectedSpikes instance.
 
-        MCD_instance    a MultiChannelData instance
-        threshold       a number, the mutiple of the MAD beyond which extrema are recorded 
-                        (positive for peaks, negative for valleys)
-        filter_length   a positive integer setting the length of the box filter used to 
-                        filter the data prior to detection
-        minimal_dist    a positive integer, the minimal distance between two successive peaks
-        not_zero        a positive float, the smallest value above which the absolute value of
-                        the derivative is considered not null.
-        spike_positions an array with spike indexes or None.
+        MCD_instance       a MultiChannelData instance
+        channels4detection the channels used for detection
+        threshold          a number, the mutiple of the MAD beyond which extrema are recorded 
+                           (positive for peaks, negative for valleys)
+        filter_length      a positive integer setting the length of the box filter used to 
+                           filter the data prior to detection
+        minimal_dist       a positive integer, the minimal distance between two successive peaks
+        not_zero           a positive float, the smallest value above which the absolute value of
+                           the derivative is considered not null.
+        spike_positions    an array with spike indexes or None.
         """
         import numpy as np
         from scipy.signal import fftconvolve
@@ -2064,13 +2161,16 @@ class DetectedSpikes:
             raise TypeError('not_zero must be a positive float')
         if not spike_positions is None and not isinstance(spike_positions,np.ndarray):
             raise TypeError('spike_positions must be an array')
+        if channels4detection is None:
+            channels4detection = list(range(MCD_instance.data.shape[0]))
         self._MCD = MCD_instance
+        self.channels4detection = channels4detection
         self.threshold = threshold
         self.filter_length = filter_length
         self.minimal_dist = minimal_dist
         self.not_zero = not_zero
         if spike_positions is None:
-            spike_positions = MCD_instance.find_extrema(filter_length,threshold,minimal_dist,not_zero)
+            spike_positions = MCD_instance[channels4detection,:].find_extrema(filter_length,threshold,minimal_dist,not_zero)
         self.spike_positions = spike_positions
     def __len__(self):
         """Return the number of detected spikes."""
@@ -2078,9 +2178,15 @@ class DetectedSpikes:
     def __str__(self):
         """Controls the printed version of the instance."""
         import numpy as np
+        if isinstance(self.channels4detection, slice):
+            channel_names = self._MCD.channel_names[self.channels4detection]
+        elif all([n in self._MCD.channel_names for n in self.channels4detection]):
+            channel_names = self.channels4detection
+        else:
+            channel_names = [self._MCD.channel_names[n] for n in self.channels4detection]
         return "An instance of DetectedSpikes.\n" \
-            + "  Spikes were detected on " + str(len(self._MCD.channel_names)) + " channels simultaneously " \
-            + str(self._MCD.channel_names) + ".\n" \
+            + "  Spikes were detected on " + str(len(channel_names)) + " channels simultaneously " \
+            + str(channel_names) + ".\n" \
             + "  A boxe filter with length " + str(self.filter_length) + " was used.\n" \
             + "  The detection threshold (multiple of the MAD) was set at " + str(self.threshold) + ".\n" \
             + "  " + str(len(self.spike_positions)) + " putative spikes were detected. The smallest inter spike interval is: " \
@@ -2109,7 +2215,7 @@ class DetectedSpikes:
     def __getitem__(self,key):
         """Return a new subsetted instance."""
         spike_positions = self.spike_positions[key]
-        return DetectedSpikes(self._MCD,self.threshold,self.filter_length,self.minimal_dist,self.not_zero,spike_positions)
+        return DetectedSpikes(self._MCD,self.channels4detection,self.threshold,self.filter_length,self.minimal_dist,self.not_zero,spike_positions)
     def mk_cuts(self,before=14, after=30,return_dict=False):
         """Make cuts from the raw data 'centered' on spike positions and
         return a matrix or a dictionnary with the cuts as well as all the parameters.
@@ -2146,6 +2252,39 @@ class DetectedSpikes:
         else:
             return res
 
+#+END_SRC
+
+*** Example of use
+
+Spikes can be detected with:
+
+#+NAME: DetectedSpikes-instanciation-example
+#+BEGIN_SRC python :session *Python* :results silent
+Spike = DetectedSpikes(Data,threshold=-3,filter_length=5) 
+#+END_SRC
+
+A written summary is obtained with:
+
+#+NAME: DetectedSpikes-print-example
+#+BEGIN_SRC python :session *Python* :results output :exports both
+print(Spike)
+#+END_SRC
+
+#+RESULTS: DetectedSpikes-print-example
+: An instance of DetectedSpikes.
+:   Spikes were detected on 4 channels simultaneously ['ch09', 'ch11', 'ch13', 'ch16'].
+:   A boxe filter with length 5 was used.
+:   The detection threshold (multiple of the MAD) was set at -3.
+:   2242 putative spikes were detected. The smallest inter spike interval is: 16, and the largest is: 2145.
+:   The mean ISI is: 192 and the ISI SD is: 195.
+: 
+: 
+
+If we wanted to detect only from the first recording site we would use:
+
+#+NAME: DetectedSpikes-instanciation-example2
+#+BEGIN_SRC python :session *Python* :results silent
+Spike0 = DetectedSpikes(Data[0,:],threshold=-3,filter_length=5) 
 #+END_SRC
 
 ** Sample Class

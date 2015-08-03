@@ -4,7 +4,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
 <title>Sorting a Big Data Set With Python</title>
-<!-- 2015-08-01 sam. 17:35 -->
+<!-- 2015-08-03 lun. 19:10 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="generator" content="Org-mode" />
 <meta  name="author" content="Christophe Pouzat" />
@@ -251,7 +251,11 @@ for the JavaScript code in this tag.
 <li><a href="#sec-5-1-1">5.1.1. Example of use</a></li>
 </ul>
 </li>
-<li><a href="#sec-5-2">5.2. DetectedSpikes Class</a></li>
+<li><a href="#sec-5-2">5.2. DetectedSpikes Class</a>
+<ul>
+<li><a href="#sec-5-2-1">5.2.1. Example of use</a></li>
+</ul>
+</li>
 <li><a href="#sec-5-3">5.3. Sample Class</a></li>
 </ul>
 </li>
@@ -1902,6 +1906,8 @@ We start with a <code>Class</code> that we call <code>MultiChannelData</code>. I
 </li>
 <li><code>variance</code>: a vector with as many elements as channels containing the variance computed on each channel.
 </li>
+<li><code>ptp</code>: a vector with as many elements as channels containing the peak to peak difference computed on each channel.
+</li>
 </ul>
 <p>
 The following methods can be called:
@@ -1933,7 +1939,7 @@ The following methods can be called:
 </li>
 </ul>
 <p>
-A length (<code>len</code>) special method is defined and subsetting can be performed on the object like on a "classical" matrix.  
+A length (<code>len</code>) special method is defined, a <code>print</code> special method is defined returning a short written summary of the instance content and subsetting can be performed on the object like on a "classical" matrix.  
 </p>
 
 <div class="org-src-container">
@@ -2048,11 +2054,48 @@ A length (<code>len</code>) special method is defined and subsetting can be perf
         """Return variance of each channel."""
         import numpy as np
         return np.var(self._data,axis=1)
+    @property
+    def ptp(self):
+        """Return peak to peak difference of each channel."""
+        import numpy as np
+        return np.ptp(self._data,axis=1)
     def copy(self):
         """Return a new instance that is a copy of the present one."""
         return MultiChannelData(self._data.copy(),self.channel_names,self.start,self.sampling_rate)
     def __getitem__(self,key):
         """Return a new subsetted instance."""
+        if isinstance(key,int):
+            foo = self.data.__getitem__(key)
+            return MultiChannelData(foo,[self.channel_names[key]],self.start,self.sampling_rate)
+        if isinstance(key,str):
+            key = self.channel_names.index(key)
+            foo = self.data.__getitem__(key)
+            return MultiChannelData(foo,[self.channel_names[key]],self.start,self.sampling_rate)
+        if isinstance(key,list):
+            if all([n in self.channel_names for n in key]):
+                key = [self.channel_names.index(n) for n in key]
+            if all([n in list(range(len(self.channel_names))) for n in key]):
+                foo = self.data.__getitem__(key)
+                return MultiChannelData(foo,[self.channel_names[n] for n in key],self.start,self.sampling_rate)
+        if isinstance(key,tuple):
+            if len(key) == 1:
+                key = key[0]
+                if isinstance(key,int):
+                    foo = self.data.__getitem__(key)
+                    return MultiChannelData(foo,[self.channel_names[key]],self.start,self.sampling_rate)
+                if isinstance(key,str):
+                    key = self.channel_names.index(key)
+                    foo = self.data.__getitem__(key)
+                    return MultiChannelData(foo,[self.channel_names[key]],self.start,self.sampling_rate)
+                if isinstance(key,list):
+                    if all([n in self.channel_names for n in key]):
+                        key = [self.channel_names.index(n) for n in key]
+                    if all([n in list(range(len(self.channel_names))) for n in key]):
+                        foo = self.data.__getitem__(key)
+                        return MultiChannelData(foo,[self.channel_names[n] for n in key],self.start,self.sampling_rate)
+                else:
+                    foo = self.data.__getitem__(key)
+                    return MultiChannelData(foo,self.channel_names[key[0]],self.start,self.sampling_rate)
         if not len(key) == 2:
             raise ValueError('key must select along both dimensions')
         if isinstance(key[1],slice) and not key[1].step is None:
@@ -2066,7 +2109,25 @@ A length (<code>len</code>) special method is defined and subsetting can be perf
             begin = key[1].start/self.sampling_rate+self.start
         else:
             begin = key[1][0]/self.sampling_rate+self.start
-        return MultiChannelData(foo,self.channel_names[key[0]],begin,self.sampling_rate)
+        if isinstance(key[0],slice) or isinstance(key[0],int):
+            channel_names = self.channel_names[key[0]]
+        elif isinstance(key[0],str):
+            channel_names = [key[0]]
+        elif all([n in self.channel_names for n in key[0]]):
+            channel_names = key[0]
+        else:
+            channel_names = [self.channel_names[n] for n in key[0]]
+        return MultiChannelData(foo,channel_names,begin,self.sampling_rate)
+    def __str__(self):
+        """Controls the printed version of the instance."""
+        import numpy as np
+        return "An instance of MultiChannelData.\n" \
+            + "  It is built from channels: " + str(self.channel_names) +".\n" \
+            + "  The number of sampling points is: " + str(len(self)) + " and the sampling rate is: " \
+            + str(self.sampling_rate) + " (Hz).\n" \
+            + "  The five number summary for each channel is:\n" \
+            + str(self.quantiles()) + "\n" \
+            + "  The MAD of each channel is:\n" + str(self.mad) + "\n"
     def plot(self,linewidth=0.2,color='black',xlabel="Time (s)"):
         """Plot the data."""
         import matplotlib.pyplot as plt
@@ -2179,12 +2240,35 @@ We could get the equivalent of our previous <code>data</code> list with:
 </div>
 
 <p>
-We can then get the five-number summary with:
+We can then get a short written summary of the instance content with:
 </p>
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="MultiChannelData-quantiles-example">Data.quantiles()
+<pre class="src src-python" id="MultiChannelData-print-example">print(Data)
+</pre>
+</div>
+
+<pre class="example">
+An instance of MultiChannelData.
+  It is built from channels: ['ch09', 'ch11', 'ch13', 'ch16'].
+  The number of sampling points is: 431548 and the sampling rate is: 15000 (Hz).
+  The five number summary for each channel is:
+[[  967.  2016.  2057.  2097.  2443.]
+ [ 1370.  2020.  2057.  2093.  2654.]
+ [ 1128.  2013.  2059.  2103.  2451.]
+ [ 1767.  2021.  2057.  2092.  2300.]]
+  The MAD of each channel is:
+[ 59.304   54.8562  66.717   53.3736]
+</pre>
+
+<p>
+The peak to peak difference is obtained with:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="MultiChannelData-ptp-example">Data.ptp
 </pre>
 </div>
 
@@ -2199,43 +2283,26 @@ We can then get the five-number summary with:
 <col  class="right" />
 
 <col  class="right" />
-
-<col  class="right" />
 </colgroup>
 <tbody>
 <tr>
-<td class="right">967</td>
-<td class="right">2016</td>
-<td class="right">2057</td>
-<td class="right">2097</td>
-<td class="right">2443</td>
-</tr>
-
-<tr>
-<td class="right">1370</td>
-<td class="right">2020</td>
-<td class="right">2057</td>
-<td class="right">2093</td>
-<td class="right">2654</td>
-</tr>
-
-<tr>
-<td class="right">1128</td>
-<td class="right">2013</td>
-<td class="right">2059</td>
-<td class="right">2103</td>
-<td class="right">2451</td>
-</tr>
-
-<tr>
-<td class="right">1767</td>
-<td class="right">2021</td>
-<td class="right">2057</td>
-<td class="right">2092</td>
-<td class="right">2300</td>
+<td class="right">1476</td>
+<td class="right">1284</td>
+<td class="right">1323</td>
+<td class="right">533</td>
 </tr>
 </tbody>
 </table>
+
+<p>
+We could get the five-number summary with (not shown):
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="MultiChannelData-quantiles-example">Data.quantiles()
+</pre>
+</div>
 
 <p>
 The documentation of the <code>plot</code> method can be obtained with:
@@ -2275,7 +2342,7 @@ Making a plot showing the first channel only is done with (results not shown):
 </div>
 
 <p>
-The median is obtained with:
+The median could be obtained with (result not shown):
 </p>
 
 <div class="org-src-container">
@@ -2284,30 +2351,8 @@ The median is obtained with:
 </pre>
 </div>
 
-<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
-
-
-<colgroup>
-<col  class="right" />
-
-<col  class="right" />
-
-<col  class="right" />
-
-<col  class="right" />
-</colgroup>
-<tbody>
-<tr>
-<td class="right">2057</td>
-<td class="right">2057</td>
-<td class="right">2059</td>
-<td class="right">2057</td>
-</tr>
-</tbody>
-</table>
-
 <p>
-And the MAD with:
+And the MAD with (result not shown):
 </p>
 
 <div class="org-src-container">
@@ -2315,28 +2360,6 @@ And the MAD with:
 <pre class="src src-python" id="MultiChannelData-MAD-example">Data.mad
 </pre>
 </div>
-
-<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
-
-
-<colgroup>
-<col  class="right" />
-
-<col  class="right" />
-
-<col  class="right" />
-
-<col  class="right" />
-</colgroup>
-<tbody>
-<tr>
-<td class="right">59.304</td>
-<td class="right">54.856</td>
-<td class="right">66.717</td>
-<td class="right">53.374</td>
-</tr>
-</tbody>
-</table>
 
 <p>
 A graph showing for a normalized version of the first recording site:
@@ -2381,25 +2404,50 @@ plt.grid()
 <h3 id="sec-5-2"><span class="section-number-3">5.2</span> DetectedSpikes Class</h3>
 <div class="outline-text-3" id="text-5-2">
 <p>
-<code>Class</code> <code>DetectedSpikes</code> will store the spikes (local maxima or minima) detection results.
+Instances of <code>class</code> <code>DetectedSpikes</code> will store the spikes (local maxima or minima) detection results. They are essentially vectors of sampling points with the following attributes:
+</p>
+<ul class="org-ul">
+<li><code>spike_positions</code>: a vector containing the positions (in sampling points) of the detected spikes.
+</li>
+<li><code>threshold</code>: the detection threshold used as a multiple of the MAD on each site. If positive respectively negative, peaks respectively valley are detected.
+</li>
+<li><code>filter_length</code>: an odd positive integer, the length of the box filter applied to the data prior to extrema detection.
+</li>
+<li><code>minimal_dist</code>: a positive integer, the minimal distance between two successive peaks. When to peak are found within this minimal distance, the first is kept (superposed events are resolved as such subsequently).
+</li>
+<li><code>not_zero</code>: a positive float, the smallest value above which the absolute value of the derivative is considered not null (a "technical" parameter used to cope with precision loss during numerical computation).  
+</li>
+</ul>
+<p>
+The following methods are available:
+</p>
+<ul class="org-ul">
+<li><code>plot</code>: generates a graph of the raw data with the detected spikes superposed (appearing as red disks).
+</li>
+<li><code>mk_cuts</code>: generates a matrix or a dictionary containing the cuts, that is portions of the raw data with the spike located at a given position within the cut.
+</li>
+</ul>
+<p>
+A length (<code>len</code>) special method is defined, a <code>print</code> special method is defined returning a short written summary of the instance content and subsetting can be performed on the object like on a "classical" vector.   
 </p>
 
 <div class="org-src-container">
 
 <pre class="src src-python" id="DetectedSpikes-Class-definition">class DetectedSpikes:
     """Detected spikes."""
-    def __init__(self,MCD_instance,threshold=4,filter_length=3,minimal_dist=15,not_zero=1e-3,spike_positions=None):
+    def __init__(self,MCD_instance,channels4detection=None,threshold=4,filter_length=3,minimal_dist=15,not_zero=1e-3,spike_positions=None):
         """Create a new DetectedSpikes instance.
 
-        MCD_instance    a MultiChannelData instance
-        threshold       a number, the mutiple of the MAD beyond which extrema are recorded 
-                        (positive for peaks, negative for valleys)
-        filter_length   a positive integer setting the length of the box filter used to 
-                        filter the data prior to detection
-        minimal_dist    a positive integer, the minimal distance between two successive peaks
-        not_zero        a positive float, the smallest value above which the absolute value of
-                        the derivative is considered not null.
-        spike_positions an array with spike indexes or None.
+        MCD_instance       a MultiChannelData instance
+        channels4detection the channels used for detection
+        threshold          a number, the mutiple of the MAD beyond which extrema are recorded 
+                           (positive for peaks, negative for valleys)
+        filter_length      a positive integer setting the length of the box filter used to 
+                           filter the data prior to detection
+        minimal_dist       a positive integer, the minimal distance between two successive peaks
+        not_zero           a positive float, the smallest value above which the absolute value of
+                           the derivative is considered not null.
+        spike_positions    an array with spike indexes or None.
         """
         import numpy as np
         from scipy.signal import fftconvolve
@@ -2416,13 +2464,16 @@ plt.grid()
             raise TypeError('not_zero must be a positive float')
         if not spike_positions is None and not isinstance(spike_positions,np.ndarray):
             raise TypeError('spike_positions must be an array')
+        if channels4detection is None:
+            channels4detection = list(range(MCD_instance.data.shape[0]))
         self._MCD = MCD_instance
+        self.channels4detection = channels4detection
         self.threshold = threshold
         self.filter_length = filter_length
         self.minimal_dist = minimal_dist
         self.not_zero = not_zero
         if spike_positions is None:
-            spike_positions = MCD_instance.find_extrema(filter_length,threshold,minimal_dist,not_zero)
+            spike_positions = MCD_instance[channels4detection,:].find_extrema(filter_length,threshold,minimal_dist,not_zero)
         self.spike_positions = spike_positions
     def __len__(self):
         """Return the number of detected spikes."""
@@ -2430,9 +2481,15 @@ plt.grid()
     def __str__(self):
         """Controls the printed version of the instance."""
         import numpy as np
+        if isinstance(self.channels4detection, slice):
+            channel_names = self._MCD.channel_names[self.channels4detection]
+        elif all([n in self._MCD.channel_names for n in self.channels4detection]):
+            channel_names = self.channels4detection
+        else:
+            channel_names = [self._MCD.channel_names[n] for n in self.channels4detection]
         return "An instance of DetectedSpikes.\n" \
-            + "  Spikes were detected on " + str(len(self._MCD.channel_names)) + " channels simultaneously " \
-            + str(self._MCD.channel_names) + ".\n" \
+            + "  Spikes were detected on " + str(len(channel_names)) + " channels simultaneously " \
+            + str(channel_names) + ".\n" \
             + "  A boxe filter with length " + str(self.filter_length) + " was used.\n" \
             + "  The detection threshold (multiple of the MAD) was set at " + str(self.threshold) + ".\n" \
             + "  " + str(len(self.spike_positions)) + " putative spikes were detected. The smallest inter spike interval is: " \
@@ -2461,7 +2518,7 @@ plt.grid()
     def __getitem__(self,key):
         """Return a new subsetted instance."""
         spike_positions = self.spike_positions[key]
-        return DetectedSpikes(self._MCD,self.threshold,self.filter_length,self.minimal_dist,self.not_zero,spike_positions)
+        return DetectedSpikes(self._MCD,self.channels4detection,self.threshold,self.filter_length,self.minimal_dist,self.not_zero,spike_positions)
     def mk_cuts(self,before=14, after=30,return_dict=False):
         """Make cuts from the raw data 'centered' on spike positions and
         return a matrix or a dictionnary with the cuts as well as all the parameters.
@@ -2498,6 +2555,50 @@ plt.grid()
         else:
             return res
 </pre>
+</div>
+</div>
+
+<div id="outline-container-sec-5-2-1" class="outline-4">
+<h4 id="sec-5-2-1"><span class="section-number-4">5.2.1</span> Example of use</h4>
+<div class="outline-text-4" id="text-5-2-1">
+<p>
+Spikes can be detected with:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="DetectedSpikes-instanciation-example">Spike = DetectedSpikes(Data,threshold=-3,filter_length=5)
+</pre>
+</div>
+
+<p>
+A written summary is obtained with:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="DetectedSpikes-print-example">print(Spike)
+</pre>
+</div>
+
+<pre class="example">
+An instance of DetectedSpikes.
+  Spikes were detected on 4 channels simultaneously ['ch09', 'ch11', 'ch13', 'ch16'].
+  A boxe filter with length 5 was used.
+  The detection threshold (multiple of the MAD) was set at -3.
+  2242 putative spikes were detected. The smallest inter spike interval is: 16, and the largest is: 2145.
+  The mean ISI is: 192 and the ISI SD is: 195.
+</pre>
+
+<p>
+If we wanted to detect only from the first recording site we would use:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="DetectedSpikes-instanciation-example2">Spike0 = DetectedSpikes(Data[0,:],threshold=-3,filter_length=5)
+</pre>
+</div>
 </div>
 </div>
 </div>
@@ -2655,7 +2756,7 @@ Christophe Pouzat. (2015). PouzatDetorakisEuroScipy2014: Complet avec référenc
 </div></div>
 <div id="postamble" class="status">
 <p class="author">Author: Christophe Pouzat</p>
-<p class="date">Created: 2015-08-01 sam. 17:35</p>
+<p class="date">Created: 2015-08-03 lun. 19:10</p>
 <p class="creator">Emacs 24.5.1 (Org mode 8.2.10)</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
