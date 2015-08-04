@@ -1853,33 +1853,43 @@ class MultiChannelData:
             raise ValueError('key must select along both dimensions')
         if isinstance(key[1],slice) and not key[1].step is None:
             raise ValueError('selection along the second dimension must be done with a step of 1')
-        foo = self._data.__getitem__(key)
+        if isinstance(key[0],str):
+            key0 = self.channel_names.index(key[0])
+        elif hasattr(key[0],'__iter__') and all([isinstance(n,str) for n in key[0]]):
+            key0 = [self.channel_names.index(n) for  n in key[0]]
+        else:
+            key0 = key[0]
+        newkey = key0,key[1] 
+        foo = self._data.__getitem__(newkey)
         if len(foo.shape)==1:
             foo.shape = (1,foo.shape[0])
-        if isinstance(key[1],slice) and key[1].start is None:
+        if isinstance(newkey[1],slice) and newkey[1].start is None:
             begin = self.start
-        elif isinstance(key[1],slice) and not key[1].start is None:
-            begin = key[1].start/self.sampling_rate+self.start
+        elif isinstance(newkey[1],slice) and not newkey[1].start is None:
+            begin = newkey[1].start/self.sampling_rate+self.start
         else:
-            begin = key[1][0]/self.sampling_rate+self.start
-        if isinstance(key[0],slice) or isinstance(key[0],int):
-            channel_names = self.channel_names[key[0]]
-        elif isinstance(key[0],str):
-            channel_names = [key[0]]
-        elif all([n in self.channel_names for n in key[0]]):
-            channel_names = key[0]
+            begin = newkey[1][0]/self.sampling_rate+self.start
+        if isinstance(newkey[0],slice) or isinstance(newkey[0],int):
+            channel_names = self.channel_names[newkey[0]]
+        elif isinstance(newkey[0],str):
+            channel_names = [newkey[0]]
+        elif all([n in self.channel_names for n in newkey[0]]):
+            channel_names = newkey[0]
         else:
-            channel_names = [self.channel_names[n] for n in key[0]]
+            channel_names = [self.channel_names[n] for n in newkey[0]]
         return MultiChannelData(foo,channel_names,begin,self.sampling_rate)
     def __str__(self):
         """Controls the printed version of the instance."""
         import numpy as np
+        quant = self.quantiles()
+        FNS = ["  " + self.channel_names[i] + ": " + str(quant[i,:]) for i in range(self.nb_channels)] 
         return "An instance of MultiChannelData.\n" \
             + "  It is built from channels: " + str(self.channel_names) +".\n" \
+            + "  Recording starts at: " + str(self.start) + " (seconds).\n" \
             + "  The number of sampling points is: " + str(len(self)) + " and the sampling rate is: " \
             + str(self.sampling_rate) + " (Hz).\n" \
             + "  The five number summary for each channel is:\n" \
-            + str(self.quantiles()) + "\n" \
+            + "\n".join(FNS) + "\n" \
             + "  The MAD of each channel is:\n" + str(self.mad) + "\n"
     def plot(self,linewidth=0.2,color='black',xlabel="Time (s)"):
         """Plot the data."""
@@ -1998,12 +2008,13 @@ print(Data)
 #+begin_example
 An instance of MultiChannelData.
   It is built from channels: ['ch09', 'ch11', 'ch13', 'ch16'].
+  Recording starts at: 0 (seconds).
   The number of sampling points is: 431548 and the sampling rate is: 15000 (Hz).
   The five number summary for each channel is:
-[[  967.  2016.  2057.  2097.  2443.]
- [ 1370.  2020.  2057.  2093.  2654.]
- [ 1128.  2013.  2059.  2103.  2451.]
- [ 1767.  2021.  2057.  2092.  2300.]]
+  ch09: [  967.  2016.  2057.  2097.  2443.]
+  ch11: [ 1370.  2020.  2057.  2093.  2654.]
+  ch13: [ 1128.  2013.  2059.  2103.  2451.]
+  ch16: [ 1767.  2021.  2057.  2092.  2300.]
   The MAD of each channel is:
 [ 59.304   54.8562  66.717   53.3736]
 #+end_example
@@ -2064,6 +2075,25 @@ Data[0,:].plot()
 
 #+RESULTS: MultiChannelData-subset-and-plot-example
 
+And making a plot with the second and third channels using their names is done with (results not shown):
+
+#+NAME: MultiChannelData-subset-and-plot-example2
+#+BEGIN_SRC python :session *Python* :eval no-export
+Data[['ch11','ch13']].plot()
+#+END_SRC
+
+#+RESULTS: MultiChannelData-subset-and-plot-example2
+
+and the following two syntaxes work just as well:
+
+#+NAME: MultiChannelData-subset-and-plot-example3
+#+BEGIN_SRC python :session *Python* :eval no-export
+Data[['ch11','ch13'],].plot()
+Data[['ch11','ch13'],:].plot()
+#+END_SRC
+
+#+RESULTS: MultiChannelData-subset-and-plot-example3
+
 The median could be obtained with (result not shown):
 
 #+NAME: MultiChannelData-median-example
@@ -2119,13 +2149,14 @@ plt.close()
 
 Instances of =class= =DetectedSpikes= will store the spikes (local maxima or minima) detection results. They are essentially vectors of sampling points with the following attributes:
 + =spike_positions=: a vector containing the positions (in sampling points) of the detected spikes.
-+ =threshold=: the detection threshold used as a multiple of the MAD on each site. If positive respectively negative, peaks respectively valley are detected.
++ =threshold=: the detection threshold used as a multiple of the MAD on each site. If positive, respectively negative, peaks, respectively valleys are detected.
 + =filter_length=: an odd positive integer, the length of the box filter applied to the data prior to extrema detection.
 + =minimal_dist=: a positive integer, the minimal distance between two successive peaks. When to peak are found within this minimal distance, the first is kept (superposed events are resolved as such subsequently).
 + =not_zero=: a positive float, the smallest value above which the absolute value of the derivative is considered not null (a "technical" parameter used to cope with precision loss during numerical computation).  
 The following methods are available:
 + =plot=: generates a graph of the raw data with the detected spikes superposed (appearing as red disks).
 + =mk_cuts=: generates a matrix or a dictionary containing the cuts, that is portions of the raw data with the spike located at a given position within the cut.
++ =mk_in_between_cuts=: generates a matrix or a dictionary containing cuts made "in between" spikes, that is portions of the raw data with no detected spike.
 A length (=len=) special method is defined, a =print= special method is defined returning a short written summary of the instance content and subsetting can be performed on the object like on a "classical" vector.   
 
 #+NAME: DetectedSpikes-Class-definition
@@ -2180,6 +2211,10 @@ class DetectedSpikes:
         import numpy as np
         if isinstance(self.channels4detection, slice):
             channel_names = self._MCD.channel_names[self.channels4detection]
+        elif isinstance(self.channels4detection, int):
+            channel_names = [self._MCD.channel_names[self.channels4detection]]
+        elif isinstance(self.channels4detection, str):
+            channel_names = [self.channels4detection]
         elif all([n in self._MCD.channel_names for n in self.channels4detection]):
             channel_names = self.channels4detection
         else:
@@ -2216,6 +2251,24 @@ class DetectedSpikes:
         """Return a new subsetted instance."""
         spike_positions = self.spike_positions[key]
         return DetectedSpikes(self._MCD,self.channels4detection,self.threshold,self.filter_length,self.minimal_dist,self.not_zero,spike_positions)
+    def _cut_sgl_evt(self,evt_pos,before,after):
+        """Make a cut from the raw data 'centered' on evt_pos and return a vector.
+
+        evt_pos  the spike position
+        before   a positive integer specifying were the cut starts before the spike position
+        after    a positive integer specifying were the cut ends after the spike position
+        """
+        import numpy as np
+        ns,dl = self._MCD._data.shape
+        cl = before+after+1 ## The length of the cut
+        cs = cl*ns ## The 'size' of a cut
+        cut = np.zeros((ns,cl))
+        idx = np.arange(-before,after+1)
+        keep = idx + evt_pos
+        within = np.bitwise_and(0 <= keep, keep < self._MCD.data.shape[1])
+        kw = keep[within]
+        cut[:,within] = self._MCD.data[:,kw].copy()
+        return cut.reshape(cs)
     def mk_cuts(self,before=14, after=30,return_dict=False):
         """Make cuts from the raw data 'centered' on spike positions and
         return a matrix or a dictionnary with the cuts as well as all the parameters.
@@ -2230,24 +2283,73 @@ class DetectedSpikes:
         if not isinstance(after,int) or after <= 0:
             raise TypeError('after must be a positive integer')
         ns,dl = self._MCD._data.shape
-        cl = before+after+1 ## The length of the cut
-        cs = cl*ns ## The 'size' of a cut
-        cut = np.zeros((ns,cl))
-        idx = np.arange(-before,after+1)
-        def cut_sgl_evt(evt_pos):
-            """Make a cut corresponding to a spike located at evt_pos."""
-            keep = idx + evt_pos
-            within = np.bitwise_and(0 <= keep, keep < dl)
-            kw = keep[within]
-            cut[:,within] = self._MCD._data[:,kw].copy()
-            return cut.reshape(cs)
         res = np.zeros((len(self),(before+after+1)*ns))
         for i,p in enumerate(self.spike_positions):
-            res[i,:] = cut_sgl_evt(p)
+            res[i,:] = self._cut_sgl_evt(p,before,after)
         if return_dict:
             return {"DS_instance": self,
                     "before": before,
                     "after": after,
+                    "cuts": res}
+        else:
+            return res
+    def mk_in_between_cuts(self,before=14, after=30, safety_factor=2, size=2000, return_dict=False):
+        """Make cuts from the raw data 'in between' spike cuts and
+        return a matrix or a dictionnary with the cuts as well as all the parameters.
+
+        before         a positive integer specifying were the cut starts before the spike position
+        after          a positive integer specifying were the cut ends after the spike position
+        safety_factor  a number by which the cut length is multiplied and which sets the minimal 
+                       distance between two successive spike times
+        size           the maximal number of noise events one wants to cut (the actual number 
+                       obtained might be smaller depending on the data length, the cut length, the 
+                       safety factor and the number of events)
+        return_dict a boolean controlling the type of result
+        """
+        import numpy as np
+        if not isinstance(before,int) or before <= 0:
+            raise TypeError('before must be a positive integer')
+        if not isinstance(after,int) or after <= 0:
+            raise TypeError('after must be a positive integer')
+        if not isinstance(safety_factor,(int,float)) or safety_factor <= 0:
+            raise TypeError('safety_factor must be a positive number')
+        if not isinstance(size,int) or size <= 0:
+            raise TypeError('size must be a positive integer')
+        ns,dl = self._MCD._data.shape
+        sl = before+after+1 ## cut length
+        i1 = np.diff(self.spike_positions) ## inter-event intervals
+        minimal_length = round(sl*safety_factor)
+        ## Get next the number of noise sweeps that can be
+        ## cut between each detected event with a safety factor
+        nb_i = (i1-minimal_length)//sl
+        ## Get the number of noise sweeps that are going to be cut
+        nb_possible = min(size,sum(nb_i[nb_i>0]))
+        res = np.zeros((nb_possible,sl*ns))
+        ## Create next a list containing the indices of the inter event
+        ## intervals that are long enough
+        idx_l = [i for i in range(len(i1)) if nb_i[i] > 0]
+        ## Make next an index running over the inter event intervals
+        ## from which at least one noise cut can be made
+        interval_idx = 0
+        n_idx = 0
+        while n_idx < nb_possible:
+            within_idx = 0 ## an index of the noise cut with a long enough interval
+            i_pos = self.spike_positions[idx_l[interval_idx]] + minimal_length
+            ## The variable defined next contains the number of noise cuts
+            ## that can be made from the "currently" considered long-enough
+            ## inter event interval
+            n_at_interval_idx = nb_i[idx_l[interval_idx]]
+            while within_idx < n_at_interval_idx and n_idx < nb_possible:
+                res[n_idx,:]= self._cut_sgl_evt(int(i_pos),before,after)
+                n_idx += 1
+                i_pos += sl
+                within_idx += 1
+            interval_idx += 1
+        if return_dict:
+            return {"DS_instance": self,
+                    "before": before,
+                    "after": after,
+                    "safety_factor":safety_factor,
                     "cuts": res}
         else:
             return res
@@ -2280,12 +2382,40 @@ print(Spike)
 : 
 : 
 
+We could quickly check the detection as we did before with (figure not shown):
+
+#+NAME: DetectedSpikes-plot-example
+#+BEGIN_SRC python :session *Python* :eval no-export :results silent
+Spike.plot()
+plt.xlim([0,0.2])
+#+END_SRC
+
+We could look at the first 200 spikes with (figure not shown):
+
+#+NAME: DetectedSpikes-plot-example2
+#+BEGIN_SRC python :session *Python* :eval no-export :results silent
+Spike[:200].plot()
+#+END_SRC
+
+
 If we wanted to detect only from the first recording site we would use:
 
 #+NAME: DetectedSpikes-instanciation-example2
-#+BEGIN_SRC python :session *Python* :results silent
-Spike0 = DetectedSpikes(Data[0,:],threshold=-3,filter_length=5) 
+#+BEGIN_SRC python :session *Python* :results output :exports both
+Spike0 = DetectedSpikes(Data,0,threshold=-3,filter_length=5) 
+print(Spike0)
 #+END_SRC
+
+#+RESULTS: DetectedSpikes-instanciation-example2
+: 
+: An instance of DetectedSpikes.
+:   Spikes were detected on 1 channels simultaneously ['ch09'].
+:   A boxe filter with length 5 was used.
+:   The detection threshold (multiple of the MAD) was set at -3.
+:   1253 putative spikes were detected. The smallest inter spike interval is: 16, and the largest is: 2381.
+:   The mean ISI is: 343 and the ISI SD is: 343.
+
+If we generate a plot =Spike0.plot()= at that stage, the four recording sites are going to be shown even if the detection was only done on the first.
 
 ** Sample Class
 
