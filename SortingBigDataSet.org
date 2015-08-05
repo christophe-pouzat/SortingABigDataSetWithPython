@@ -1265,10 +1265,6 @@ swp.plot_events(evts[np.array(c8b) == 7,:])
 plt.ylim([-20,15])
 #+END_SRC
 
-[fn:PouzatMazorLaurent2002] C. Pouzat, O. Mazor and G. Laurent (2002) [[http://xtof.perso.math.cnrs.fr/pdf/Pouzat+:2002.pdf][Using noise signature to optimize spike-sorting and to assess neuronal classification quality.]] /Journal of Neuroscience Methods/ *122*: 43-57.
-[fn:Pouzat2014] Pouzat, Christophe. (2015). Peri-Stimulus Time Histograms Estimation Through Poisson Regression Without Generalized Linear Models. Zenodo. [[http://dx.doi.org/10.5281/zenodo.14660][10.5281/zenodo.14660]].
-[fn:PouzatDetorakis2014] Christophe Pouzat. (2015). PouzatDetorakisEuroScipy2014: Complet avec référence. Zenodo. [[http://dx.doi.org/10.5281/zenodo.15070][10.5281/zenodo.15070]].
-
 
 ** Spike "peeling": a "Brute force" superposition resolution :export:
 We are going to resolve (the most "obvious") superpositions by a "recursive peeling method":
@@ -2417,7 +2413,21 @@ If we generate a plot =Spike0.plot()= at that stage, the four recording sites ar
 
 ** Sample Class
 
-=Class= =Sample= is designed to contain the events' sample, that is a collection of cuts around each detected spikes.
+=Class= =Sample= is designed to contain the events' sample, that is a collection of cuts around each detected spikes. Instances of this class have the following attributes:
++ =cuts=: a matrix with the cuts, each of the 'number of events' rows contains an event with the spike waveform on the different recording sites put one after the other.
++ =before=: a positive integer, the number of sampling points (within the cut) before the reference time.
++ =after=: a positive integer, the number of sampling points (within the cut) after the reference time---the cut length equals before+after+1, stated differently it goes from -before to after with the reference time set at 0.
++ =shape=: a tuple (number of events, cut length x number of channels).
++ =mean=: a vector, the mean event.
++ =median=: a vector, the median event.
++ =mad=: a vector, the mad of the events' sample.
++ =std=: a vector, the standard deviation of the events' sample.
++ =var=: a vector, the variance of the events' sample.
++ =good_limits=: a dictionary with entries 'before' and 'after' giving the 'recommended' cut parameters based on the domain over which the events' sample MAD exceeds the full trace MAD.
+The following methods are available:
++ =plotM=: generates a plot with the events' sample median and the events' sample MAD to which the median has been added; this method is designed to guide a visual setting of the 'right' cut parameters 'before' and 'after'.
++ =plot=: generates a plot of the events with the events' sample median and MAD.
+A  =print= special method is defined returning a short written summary of the instance content and subsetting can be performed on the object like on a "classical" matrix.   
 
 #+NAME: Sample-Class-definition
 #+BEGIN_SRC python :session *Python* :results silent
@@ -2454,7 +2464,7 @@ class Sample:
         """The shape."""
         return self._cuts.shape
     @property
-    def get_cuts(self):
+    def cuts(self):
         """Get the data."""
         return self._cuts
     @property
@@ -2495,8 +2505,17 @@ class Sample:
         ## one channel
         MAD = np.where(np.apply_along_axis(lambda x: np.any(x), 0 , MAD))[0]-self.before
         MADd = np.array(list(np.diff(MAD))+[1]) ## We want contiguous sample points (so a diff of 1)
-        return (MAD[np.max(np.where(MADd[MAD<0]>1)[0])+1],
-                MAD[np.min(np.where(MADd[MAD>=0]>1)[0])+np.sum(MAD<0)])
+        before = MAD[np.max(np.where(MADd[MAD<0]>1)[0])+1] if len(np.where(MADd[MAD<0]>1)[0]) > 0 else MAD[0]
+        after = MAD[np.min(np.where(MADd[MAD>=0]>1)[0])+np.sum(MAD<0)] if len(np.where(MADd[MAD>=0]>1)[0]) > 0 else MAD[-1]
+        return {'before': np.abs(before),
+                'after': after}
+    def __str__(self):
+        """Controls the printed version of the instance."""
+        import numpy as np
+        return "An instance of Sample.\n" \
+            "  The instance contains: " + str(self.shape[0]) + " events.\n" \
+            "  The cuts are: " + str(self.before+self.after+1) + " sampling points long.\n" \
+            "  The reference time is located at position " + str(self.before) + " within each cut (indexes start at 0).\n" 
     def plotM(self,v_spacing=10,
               median_color='red',median_lw=2,
               mad_color='blue',mad_lw=2):
@@ -2552,12 +2571,91 @@ class Sample:
             plt.axvspan(l,l+cut_length-1,
                         facecolor='grey',alpha=0.5,edgecolor='none')
         plt.xticks([])
-        plt.ylim([np.min(self.get_cuts),np.max(self.get_cuts)])
+        plt.xlim([0,self.shape[1]])
+        plt.ylim([np.min(self.cuts),np.max(self.cuts)])
     def __getitem__(self,key):
         """Return a new subsetted instance."""
         cuts = self._cuts[key]
         return Sample(self._DS[key[0]],self.before,self.after,cuts)
     
+#+END_SRC
+
+*** Example of use
+
+We start with "long cuts" as we did previously to determine the "right" cut length:
+
+#+NAME: Sample-instanciation-and-print-example
+#+BEGIN_SRC python :session *Python* :exports both :results output 
+Evts = Sample(Spike,before=49,after=50)
+print(Evts)
+#+END_SRC
+
+#+RESULTS: Sample-instanciation-and-print-example
+: 
+: An instance of Sample.
+:   The instance contains: 2242 events.
+:   The cuts are: 100 sampling points long.
+:   The reference time is located at position 49 within each cut (indexes start at 0).
+
+We can get a plot with the median and MAD with (result not shown):
+
+#+NAME: Sample-plotM-example
+#+BEGIN_SRC python :session *Python* :eval no-export :results silent
+Evts.plotM()
+#+END_SRC
+
+We can also call the =good_limits= method in order to have an automatic "good" value for the parameters 'before' and 'after':
+
+#+NAME: Sample-good_limits-example
+#+BEGIN_SRC python :session *Python*
+Evts.good_limits
+#+END_SRC
+
+#+RESULTS: Sample-good_limits-example
+| after | : | 23 | before | : | 8 |
+
+We see that we get here a slightly tighter cut than we did previously with our visual setting. We then redo our cuts with these parameters:
+
+#+NAME: Sample-instanciation-and-print-example2
+#+BEGIN_SRC python :session *Python* :exports both :results output 
+Evts = Sample(Spike,before=8,after=23)
+print(Evts)
+#+END_SRC
+
+#+RESULTS: Sample-instanciation-and-print-example2
+: 
+: An instance of Sample.
+:   The instance contains: 2242 events.
+:   The cuts are: 32 sampling points long.
+:   The reference time is located at position 8 within each cut (indexes start at 0).
+
+The first 200 events can be visualized with:
+
+#+NAME: Sample-plot-example
+#+BEGIN_SRC python :session *Python* :results silent :eval no-export 
+Evts[:200,:].plot()
+#+END_SRC
+
+#+BEGIN_SRC python :session *Python*
+def good_evts_fct(samp, thr=3):
+    import numpy as np
+    from numpy import apply_along_axis as apply 
+    samp_med = samp.median
+    samp_mad = samp.mad
+    bellow = samp_med < 0
+    samp_r = samp.cuts.copy()
+    for i in range(samp.shape[0]): samp_r[i,bellow] = 0
+    samp_med[bellow] = 0
+    res = apply(lambda x:
+                np.all(abs((x-samp_med)/samp_mad) < thr),
+                1,samp_r)
+    return res
+#+END_SRC
+
+#+BEGIN_SRC python :session *Python*
+good_evts = good_evts_fct(Evts,8)
+Evts[-good_evts,:].plot()
+Evts[good_evts,:].plot()
 #+END_SRC
 
 * Clean up, etc :export:
@@ -2573,3 +2671,8 @@ db['round_all'] = round_all
 db['spike_trains'] = spike_trains
 db.close()
 #+END_SRC
+
+
+[fn:PouzatMazorLaurent2002] C. Pouzat, O. Mazor and G. Laurent (2002) [[http://xtof.perso.math.cnrs.fr/pdf/Pouzat+:2002.pdf][Using noise signature to optimize spike-sorting and to assess neuronal classification quality.]] /Journal of Neuroscience Methods/ *122*: 43-57.
+[fn:Pouzat2014] Pouzat, Christophe. (2015). Peri-Stimulus Time Histograms Estimation Through Poisson Regression Without Generalized Linear Models. Zenodo. [[http://dx.doi.org/10.5281/zenodo.14660][10.5281/zenodo.14660]].
+[fn:PouzatDetorakis2014] Christophe Pouzat. (2015). PouzatDetorakisEuroScipy2014: Complet avec référence. Zenodo. [[http://dx.doi.org/10.5281/zenodo.15070][10.5281/zenodo.15070]].

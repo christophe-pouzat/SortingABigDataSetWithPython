@@ -3,23 +3,30 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<title>Sorting a Big Data Set With Python</title>
-<!-- 2015-08-04 mar. 15:24 -->
+<!-- 2015-08-05 mer. 17:42 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta  name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sorting a Big Data Set With Python</title>
 <meta  name="generator" content="Org-mode" />
 <meta  name="author" content="Christophe Pouzat" />
 <style type="text/css">
  <!--/*--><![CDATA[/*><!--*/
-  .title  { text-align: center; }
+  .title  { text-align: center;
+             margin-bottom: .2em; }
+  .subtitle { text-align: center;
+              font-size: medium;
+              font-weight: bold;
+              margin-top:0; }
   .todo   { font-family: monospace; color: red; }
-  .done   { color: green; }
+  .done   { font-family: monospace; color: green; }
+  .priority { font-family: monospace; color: orange; }
   .tag    { background-color: #eee; font-family: monospace;
             padding: 2px; font-size: 80%; font-weight: normal; }
   .timestamp { color: #bebebe; }
   .timestamp-kwd { color: #5f9ea0; }
-  .right  { margin-left: auto; margin-right: 0px;  text-align: right; }
-  .left   { margin-left: 0px;  margin-right: auto; text-align: left; }
-  .center { margin-left: auto; margin-right: auto; text-align: center; }
+  .org-right  { margin-left: auto; margin-right: 0px;  text-align: right; }
+  .org-left   { margin-left: 0px;  margin-right: auto; text-align: left; }
+  .org-center { margin-left: auto; margin-right: auto; text-align: center; }
   .underline { text-decoration: underline; }
   #postamble p, #preamble p { font-size: 90%; margin: .2em; }
   p.verse { margin-left: 3%; }
@@ -58,15 +65,14 @@
   caption.t-above { caption-side: top; }
   caption.t-bottom { caption-side: bottom; }
   td, th { vertical-align:top;  }
-  th.right  { text-align: center;  }
-  th.left   { text-align: center;   }
-  th.center { text-align: center; }
-  td.right  { text-align: right;  }
-  td.left   { text-align: left;   }
-  td.center { text-align: center; }
+  th.org-right  { text-align: center;  }
+  th.org-left   { text-align: center;   }
+  th.org-center { text-align: center; }
+  td.org-right  { text-align: right;  }
+  td.org-left   { text-align: left;   }
+  td.org-center { text-align: center; }
   dt { font-weight: bold; }
-  .footpara:nth-child(2) { display: inline; }
-  .footpara { display: block; }
+  .footpara { display: inline; }
   .footdef  { margin-bottom: 1em; }
   .figure { padding: 1em; }
   .figure p { text-align: center; }
@@ -134,48 +140,28 @@ for the JavaScript code in this tag.
  }
 /*]]>*///-->
 </script>
-<script type="text/javascript" src="http://orgmode.org/mathjax/MathJax.js"></script>
-<script type="text/javascript">
-<!--/*--><![CDATA[/*><!--*/
+<script type="text/x-mathjax-config">
     MathJax.Hub.Config({
-        // Only one of the two following lines, depending on user settings
-        // First allows browser-native MathML display, second forces HTML/CSS
-        //  config: ["MMLorHTML.js"], jax: ["input/TeX"],
-            jax: ["input/TeX", "output/HTML-CSS"],
-        extensions: ["tex2jax.js","TeX/AMSmath.js","TeX/AMSsymbols.js",
-                     "TeX/noUndefined.js"],
-        tex2jax: {
-            inlineMath: [ ["\\(","\\)"] ],
-            displayMath: [ ['$$','$$'], ["\\[","\\]"], ["\\begin{displaymath}","\\end{displaymath}"] ],
-            skipTags: ["script","noscript","style","textarea","pre","code"],
-            ignoreClass: "tex2jax_ignore",
-            processEscapes: false,
-            processEnvironments: true,
-            preview: "TeX"
-        },
-        showProcessingMessages: true,
         displayAlign: "center",
-        displayIndent: "2em",
+        displayIndent: "0em",
 
-        "HTML-CSS": {
-             scale: 100,
-             availableFonts: ["STIX","TeX"],
-             preferredFont: "TeX",
-             webFont: "TeX",
-             imageFont: "TeX",
-             showMathMenu: true,
-        },
-        MMLorHTML: {
-             prefer: {
-                 MSIE:    "MML",
-                 Firefox: "MML",
-                 Opera:   "HTML",
-                 other:   "HTML"
+        "HTML-CSS": { scale: 100,
+                        linebreaks: { automatic: "false" },
+                        webFont: "TeX"
+                       },
+        SVG: {scale: 100,
+              linebreaks: { automatic: "false" },
+              font: "TeX"},
+        NativeMML: {scale: 100},
+        TeX: { equationNumbers: {autoNumber: "AMS"},
+               MultLineWidth: "85%",
+               TagSide: "right",
+               TagIndent: ".8em"
              }
-        }
-    });
-/*]]>*///-->
+});
 </script>
+<script type="text/javascript"
+        src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS_HTML"></script>
 </head>
 <body>
 <div id="content">
@@ -184,91 +170,94 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#sec-1">1. Introduction</a></li>
-<li><a href="#sec-2">2. Getting the data</a>
+<li><a href="#orgheadline1">1. Introduction</a></li>
+<li><a href="#orgheadline4">2. Getting the data</a>
 <ul>
-<li><a href="#sec-2-1">2.1. Getting the data set for model estimation</a></li>
-<li><a href="#sec-2-2">2.2. An import remark on the data</a></li>
+<li><a href="#orgheadline2">2.1. Getting the data set for model estimation</a></li>
+<li><a href="#orgheadline3">2.2. An import remark on the data</a></li>
 </ul>
 </li>
-<li><a href="#sec-3">3. Loading modules and code</a></li>
-<li><a href="#sec-4">4. Model / Catalog Estimation</a>
+<li><a href="#orgheadline5">3. Loading modules and code</a></li>
+<li><a href="#orgheadline36">4. Model / Catalog Estimation</a>
 <ul>
-<li><a href="#sec-4-1">4.1. Preliminary analysis</a>
+<li><a href="#orgheadline9">4.1. Preliminary analysis</a>
 <ul>
-<li><a href="#sec-4-1-1">4.1.1. Five number summary</a></li>
-<li><a href="#sec-4-1-2">4.1.2. Were the data normalized?</a></li>
-<li><a href="#sec-4-1-3">4.1.3. Discretization step amplitude</a></li>
+<li><a href="#orgheadline6">4.1.1. Five number summary</a></li>
+<li><a href="#orgheadline7">4.1.2. Were the data normalized?</a></li>
+<li><a href="#orgheadline8">4.1.3. Discretization step amplitude</a></li>
 </ul>
 </li>
-<li><a href="#sec-4-2">4.2. Plot the data</a></li>
-<li><a href="#sec-4-3">4.3. Data renormalization</a></li>
-<li><a href="#sec-4-4">4.4. Detect valleys</a>
+<li><a href="#orgheadline10">4.2. Plot the data</a></li>
+<li><a href="#orgheadline11">4.3. Data renormalization</a></li>
+<li><a href="#orgheadline13">4.4. Detect valleys</a>
 <ul>
-<li><a href="#sec-4-4-1">4.4.1. Interactive spike detection check</a></li>
+<li><a href="#orgheadline12">4.4.1. Interactive spike detection check</a></li>
 </ul>
 </li>
-<li><a href="#sec-4-5">4.5. Cuts</a>
+<li><a href="#orgheadline17">4.5. Cuts</a>
 <ul>
-<li><a href="#sec-4-5-1">4.5.1. Events</a></li>
-<li><a href="#sec-4-5-2">4.5.2. Noise</a></li>
-<li><a href="#sec-4-5-3">4.5.3. Getting "clean" events</a></li>
+<li><a href="#orgheadline14">4.5.1. Events</a></li>
+<li><a href="#orgheadline15">4.5.2. Noise</a></li>
+<li><a href="#orgheadline16">4.5.3. Getting "clean" events</a></li>
 </ul>
 </li>
-<li><a href="#sec-4-6">4.6. Dimension reduction</a>
+<li><a href="#orgheadline22">4.6. Dimension reduction</a>
 <ul>
-<li><a href="#sec-4-6-1">4.6.1. Principal Component Analysis (PCA)</a></li>
-<li><a href="#sec-4-6-2">4.6.2. Exploring <code>PCA</code> results</a></li>
-<li><a href="#sec-4-6-3">4.6.3. Static representation of the projected data</a></li>
-<li><a href="#sec-4-6-4">4.6.4. Dynamic visualization of the data with <code>GGobi</code></a></li>
+<li><a href="#orgheadline18">4.6.1. Principal Component Analysis (PCA)</a></li>
+<li><a href="#orgheadline19">4.6.2. Exploring <code>PCA</code> results</a></li>
+<li><a href="#orgheadline20">4.6.3. Static representation of the projected data</a></li>
+<li><a href="#orgheadline21">4.6.4. Dynamic visualization of the data with <code>GGobi</code></a></li>
 </ul>
 </li>
-<li><a href="#sec-4-7">4.7. Clustering with K-Means</a>
+<li><a href="#orgheadline28">4.7. Clustering with K-Means</a>
 <ul>
-<li><a href="#sec-4-7-1">4.7.1. Cluster specific plots</a></li>
-<li><a href="#sec-4-7-2">4.7.2. Results inspection with <code>GGobi</code></a></li>
-<li><a href="#sec-4-7-3">4.7.3. Preliminary conclusion</a></li>
-<li><a href="#sec-4-7-4">4.7.4. Splitting cluster 1 in two</a></li>
-<li><a href="#sec-4-7-5">4.7.5. Construction of a labeling with 8 units</a></li>
+<li><a href="#orgheadline23">4.7.1. Cluster specific plots</a></li>
+<li><a href="#orgheadline24">4.7.2. Results inspection with <code>GGobi</code></a></li>
+<li><a href="#orgheadline25">4.7.3. Preliminary conclusion</a></li>
+<li><a href="#orgheadline26">4.7.4. Splitting cluster 1 in two</a></li>
+<li><a href="#orgheadline27">4.7.5. Construction of a labeling with 8 units</a></li>
 </ul>
 </li>
-<li><a href="#sec-4-8">4.8. Spike "peeling": a "Brute force" superposition resolution</a>
+<li><a href="#orgheadline34">4.8. Spike "peeling": a "Brute force" superposition resolution</a>
 <ul>
-<li><a href="#sec-4-8-1">4.8.1. First peeling</a></li>
-<li><a href="#sec-4-8-2">4.8.2. Second peeling</a></li>
-<li><a href="#sec-4-8-3">4.8.3. Third peeling</a></li>
-<li><a href="#sec-4-8-4">4.8.4. Fourth peeling</a></li>
-<li><a href="#sec-4-8-5">4.8.5. General comparison</a></li>
+<li><a href="#orgheadline29">4.8.1. First peeling</a></li>
+<li><a href="#orgheadline30">4.8.2. Second peeling</a></li>
+<li><a href="#orgheadline31">4.8.3. Third peeling</a></li>
+<li><a href="#orgheadline32">4.8.4. Fourth peeling</a></li>
+<li><a href="#orgheadline33">4.8.5. General comparison</a></li>
 </ul>
 </li>
-<li><a href="#sec-4-9">4.9. Getting the spike trains</a></li>
+<li><a href="#orgheadline35">4.9. Getting the spike trains</a></li>
 </ul>
 </li>
-<li><a href="#sec-5">5. Defining classes and methods for a systematic analysis of the remaining of the experiment</a>
+<li><a href="#orgheadline43">5. Defining classes and methods for a systematic analysis of the remaining of the experiment</a>
 <ul>
-<li><a href="#sec-5-1">5.1. MultiChannelData Class</a>
+<li><a href="#orgheadline38">5.1. MultiChannelData Class</a>
 <ul>
-<li><a href="#sec-5-1-1">5.1.1. Example of use</a></li>
+<li><a href="#orgheadline37">5.1.1. Example of use</a></li>
 </ul>
 </li>
-<li><a href="#sec-5-2">5.2. DetectedSpikes Class</a>
+<li><a href="#orgheadline40">5.2. DetectedSpikes Class</a>
 <ul>
-<li><a href="#sec-5-2-1">5.2.1. Example of use</a></li>
+<li><a href="#orgheadline39">5.2.1. Example of use</a></li>
 </ul>
 </li>
-<li><a href="#sec-5-3">5.3. Sample Class</a></li>
+<li><a href="#orgheadline42">5.3. Sample Class</a>
+<ul>
+<li><a href="#orgheadline41">5.3.1. Example of use</a></li>
 </ul>
 </li>
-<li><a href="#sec-6">6. Clean up, etc</a></li>
+</ul>
+</li>
+<li><a href="#orgheadline44">6. Clean up, etc</a></li>
 </ul>
 </div>
 </div>
-
-<div id="outline-container-sec-1" class="outline-2">
-<h2 id="sec-1"><span class="section-number-2">1</span> Introduction</h2>
+<div id="outline-container-orgheadline1" class="outline-2">
+<h2 id="orgheadline1"><span class="section-number-2">1</span> Introduction</h2>
 <div class="outline-text-2" id="text-1">
 <p>
-The purpose of this document is to expose in a comprehensive way how the spike sorting of a "large" data set can be performed with "simple" tools built around the <code>Python</code> language. The data were recorded from a locust <i>Schistocerca americana</i> antennal lobe (the first olfactory relay, equivalent of the <i>olfactory bulb</i> of vertebrates). A total of 1 hour and 40 minutes of spontaneous activity was recorded as well as responses to 150 stimulation with citral. The set is publicly available on <a href="https://zenodo.org/record/21589">zenodo</a> (DOI: <a href="http://dx.doi.org/10.5281/zenodo.21589">10.5281/zenodo.21589</a>). The recording setting is described in Pouzat, Mazor and Laurent (2002)<sup><a id="fnr.1" name="fnr.1" class="footref" href="#fn.1">1</a></sup> and a picture of the recording situation can be seen of the third slide of Pouzat (2014)<sup><a id="fnr.2" name="fnr.2" class="footref" href="#fn.2">2</a></sup>. The purpose of these long recordings was probing interactions between neurons and how they are modified by a stimulus.
+The purpose of this document is to expose in a comprehensive way how the spike sorting of a "large" data set can be performed with "simple" tools built around the <code>Python</code> language. The data were recorded from a locust <i>Schistocerca americana</i> antennal lobe (the first olfactory relay, equivalent of the <i>olfactory bulb</i> of vertebrates). A total of 1 hour and 40 minutes of spontaneous activity was recorded as well as responses to 150 stimulation with citral. The set is publicly available on <a href="https://zenodo.org/record/21589">zenodo</a> (DOI: <a href="http://dx.doi.org/10.5281/zenodo.21589">10.5281/zenodo.21589</a>). The recording setting is described in Pouzat, Mazor and Laurent (2002)<sup><a id="fnr.1" class="footref" href="#fn.1">1</a></sup> and a picture of the recording situation can be seen of the third slide of Pouzat (2014)<sup><a id="fnr.2" class="footref" href="#fn.2">2</a></sup>. The purpose of these long recordings was probing interactions between neurons and how they are modified by a stimulus.
 </p>
 
 <p>
@@ -285,8 +274,8 @@ The following analysis was performed with the <a href="https://store.continuum.i
 </div>
 </div>
 
-<div id="outline-container-sec-2" class="outline-2">
-<h2 id="sec-2"><span class="section-number-2">2</span> Getting the data</h2>
+<div id="outline-container-orgheadline4" class="outline-2">
+<h2 id="orgheadline4"><span class="section-number-2">2</span> Getting the data</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 The data are stored in <a href="http://www.hdfgroup.org/HDF5/">HDF5</a> format on the <a href="https://zenodo.org/">zenodo</a> server. They are all contained in a file named <code>locust20010201.hdf5</code>. The data within this file have an hierarchical organization similar to the one of a file system (one of the main ideas of the HDF5 format).
@@ -298,7 +287,7 @@ The data can be downloaded with <code>Python</code> as follows:
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="download-data">try:
+<pre class="src src-python" id="orgsrcblock1">try:
     from urllib.request import urlretrieve # Python 3
 except ImportError:
     from urllib import urlretrieve # Python 2
@@ -314,7 +303,7 @@ Since the data are in HDF5 format, we need to load the <a href="http://docs.h5py
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="import-h5py">import h5py
+<pre class="src src-python" id="orgsrcblock2">import h5py
 </pre>
 </div>
 
@@ -324,7 +313,7 @@ We then open the file in read mode and we print the content of the <code>LabBook
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="open-locust20010201.hdf5">hdf = h5py.File('locust20010201.hdf5','r')
+<pre class="src src-python" id="orgsrcblock3">hdf = h5py.File('locust20010201.hdf5','r')
 print(hdf.attrs['LabBook'])
 </pre>
 </div>
@@ -349,7 +338,7 @@ We can get the names of the different groups as follows:
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="print-group-names">for name in hdf:
+<pre class="src src-python" id="orgsrcblock4">for name in hdf:
     print(name)
 </pre>
 </div>
@@ -371,7 +360,7 @@ We can get the names of the subgroups of group <code>Continuous_1</code> with (t
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="print-subgroup-of-Continuous_1-names">for name in hdf['Continuous_1']:
+<pre class="src src-python" id="orgsrcblock5">for name in hdf['Continuous_1']:
     print(name)
 </pre>
 </div>
@@ -382,29 +371,29 @@ The content of the <code>log_file_content</code> attribute of group <code>Contin
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="print-log_file_content-attribute-of-Continuous_1">print(hdf['Continuous_1'].attrs['log_file_content'])
+<pre class="src src-python" id="orgsrcblock6">print(hdf['Continuous_1'].attrs['log_file_content'])
 </pre>
 </div>
 </div>
 
-<div id="outline-container-sec-2-1" class="outline-3">
-<h3 id="sec-2-1"><span class="section-number-3">2.1</span> Getting the data set for model estimation</h3>
+<div id="outline-container-orgheadline2" class="outline-3">
+<h3 id="orgheadline2"><span class="section-number-3">2.1</span> Getting the data set for model estimation</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
-We are going to follow the tutorial of <a href="https://github.com/christophe-pouzat/PouzatDetorakisEuroScipy2014">Pouzat and Detorakis (2014)</a><sup><a id="fnr.3" name="fnr.3" class="footref" href="#fn.3">3</a></sup> that can also be followed in <a href="http://xtof.perso.math.cnrs.fr/locust_sorting_python.html">HTML version</a>. This means that we have to create a list of 1D arrays where each array contains the data from one recording site; we are going to do that using the first trial (<code>trial_1</code>), that is the first 29 s, of <code>Continuous_1</code>:
+We are going to follow the tutorial of <a href="https://github.com/christophe-pouzat/PouzatDetorakisEuroScipy2014">Pouzat and Detorakis (2014)</a><sup><a id="fnr.3" class="footref" href="#fn.3">3</a></sup> that can also be followed in <a href="http://xtof.perso.math.cnrs.fr/locust_sorting_python.html">HTML version</a>. This means that we have to create a list of 1D arrays where each array contains the data from one recording site; we are going to do that using the first trial (<code>trial_1</code>), that is the first 29 s, of <code>Continuous_1</code>:
 </p>
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="assign-data-list">ch_names = ['ch09','ch11','ch13','ch16']
+<pre class="src src-python" id="orgsrcblock7">ch_names = ['ch09','ch11','ch13','ch16']
 data = [hdf['Continuous_1']['trial_01'][name][...] for name in ch_names]
 </pre>
 </div>
 </div>
 </div>
 
-<div id="outline-container-sec-2-2" class="outline-3">
-<h3 id="sec-2-2"><span class="section-number-3">2.2</span> An import remark on the data</h3>
+<div id="outline-container-orgheadline3" class="outline-3">
+<h3 id="orgheadline3"><span class="section-number-3">2.2</span> An import remark on the data</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 <b>The data are saved in the HDF5 file as they came out of the A/D converter on 16 bit integers</b>. They were band-pass filtered between 300 and 5 kHz and sampled at 15 kHz. 
@@ -413,8 +402,8 @@ data = [hdf['Continuous_1']['trial_01'][name][...] for name in ch_names]
 </div>
 </div>
 
-<div id="outline-container-sec-3" class="outline-2">
-<h2 id="sec-3"><span class="section-number-2">3</span> Loading modules and code</h2>
+<div id="outline-container-orgheadline5" class="outline-2">
+<h2 id="orgheadline5"><span class="section-number-2">3</span> Loading modules and code</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 We are going to use the usual scientific python modules and we set the interactive mode for <code>pyplot</code>:
@@ -422,7 +411,7 @@ We are going to use the usual scientific python modules and we set the interacti
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="load-usual-modules">import numpy as np
+<pre class="src src-python" id="orgsrcblock8">import numpy as np
 import matplotlib.pyplot as plt
 plt.ion()
 import scipy
@@ -435,32 +424,32 @@ We download and then load the sorting specific codes:
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="download-sorting_with_python">urlretrieve('https://github.com/christophe-pouzat/PouzatDetorakisEuroScipy2014/raw/master/sorting_with_python.py',\
+<pre class="src src-python" id="orgsrcblock9">urlretrieve('https://github.com/christophe-pouzat/PouzatDetorakisEuroScipy2014/raw/master/sorting_with_python.py',\
             'sorting_with_python.py')
 </pre>
 </div>
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="load-sorting_with_python">import sorting_with_python as swp
+<pre class="src src-python" id="orgsrcblock10">import sorting_with_python as swp
 </pre>
 </div>
 </div>
 </div>
 
-<div id="outline-container-sec-4" class="outline-2">
-<h2 id="sec-4"><span class="section-number-2">4</span> Model / Catalog Estimation</h2>
+<div id="outline-container-orgheadline36" class="outline-2">
+<h2 id="orgheadline36"><span class="section-number-2">4</span> Model / Catalog Estimation</h2>
 <div class="outline-text-2" id="text-4">
-</div><div id="outline-container-sec-4-1" class="outline-3">
-<h3 id="sec-4-1"><span class="section-number-3">4.1</span> Preliminary analysis</h3>
+</div><div id="outline-container-orgheadline9" class="outline-3">
+<h3 id="orgheadline9"><span class="section-number-3">4.1</span> Preliminary analysis</h3>
 <div class="outline-text-3" id="text-4-1">
 <p>
 We are going to start our analysis by some "sanity checks" to make sure that nothing "weird" happened during the recording.
 </p>
 </div>
 
-<div id="outline-container-sec-4-1-1" class="outline-4">
-<h4 id="sec-4-1-1"><span class="section-number-4">4.1.1</span> Five number summary</h4>
+<div id="outline-container-orgheadline6" class="outline-4">
+<h4 id="orgheadline6"><span class="section-number-4">4.1.1</span> Five number summary</h4>
 <div class="outline-text-4" id="text-4-1-1">
 <p>
 We should start by getting an overall picture of the data like the one provided by the <code>mquantiles</code> method of module <code>scipy.stats.mstats</code> using it to output a <a href="http://en.wikipedia.org/wiki/Five-number_summary">five-number summary</a>. The five numbers are the <code>minimum</code>, the <code>first quartile</code>, the <code>median</code>, the <code>third quartile</code> and the <code>maximum</code>. Since the data were band-pass filtered between 300 and 5kHz and since they were stored "as they came out of the A/D card" <b>we do not expect their median value to be 0</b>.
@@ -468,7 +457,7 @@ We should start by getting an overall picture of the data like the one provided 
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="five-number-summary">from scipy.stats.mstats import mquantiles
+<pre class="src src-python" id="orgsrcblock11">from scipy.stats.mstats import mquantiles
 np.set_printoptions(precision=3)
 np.array([mquantiles(x,prob=[0,0.25,0.5,0.75,1]) for x in data])
 </pre>
@@ -478,47 +467,47 @@ np.array([mquantiles(x,prob=[0,0.25,0.5,0.75,1]) for x in data])
 
 
 <colgroup>
-<col  class="right" />
+<col  class="org-right" />
 
-<col  class="right" />
+<col  class="org-right" />
 
-<col  class="right" />
+<col  class="org-right" />
 
-<col  class="right" />
+<col  class="org-right" />
 
-<col  class="right" />
+<col  class="org-right" />
 </colgroup>
 <tbody>
 <tr>
-<td class="right">967</td>
-<td class="right">2016</td>
-<td class="right">2057</td>
-<td class="right">2097</td>
-<td class="right">2443</td>
+<td class="org-right">967</td>
+<td class="org-right">2016</td>
+<td class="org-right">2057</td>
+<td class="org-right">2097</td>
+<td class="org-right">2443</td>
 </tr>
 
 <tr>
-<td class="right">1370</td>
-<td class="right">2020</td>
-<td class="right">2057</td>
-<td class="right">2093</td>
-<td class="right">2654</td>
+<td class="org-right">1370</td>
+<td class="org-right">2020</td>
+<td class="org-right">2057</td>
+<td class="org-right">2093</td>
+<td class="org-right">2654</td>
 </tr>
 
 <tr>
-<td class="right">1128</td>
-<td class="right">2013</td>
-<td class="right">2059</td>
-<td class="right">2103</td>
-<td class="right">2451</td>
+<td class="org-right">1128</td>
+<td class="org-right">2013</td>
+<td class="org-right">2059</td>
+<td class="org-right">2103</td>
+<td class="org-right">2451</td>
 </tr>
 
 <tr>
-<td class="right">1767</td>
-<td class="right">2021</td>
-<td class="right">2057</td>
-<td class="right">2092</td>
-<td class="right">2300</td>
+<td class="org-right">1767</td>
+<td class="org-right">2021</td>
+<td class="org-right">2057</td>
+<td class="org-right">2092</td>
+<td class="org-right">2300</td>
 </tr>
 </tbody>
 </table>
@@ -529,7 +518,7 @@ We see that they have similar but not identical inter quartile ranges: 81, 73, 9
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="Continous_1-trial_1-domain">[np.ptp(x) for x in data]
+<pre class="src src-python" id="orgsrcblock12">[np.ptp(x) for x in data]
 </pre>
 </div>
 
@@ -537,20 +526,20 @@ We see that they have similar but not identical inter quartile ranges: 81, 73, 9
 
 
 <colgroup>
-<col  class="right" />
+<col  class="org-right" />
 
-<col  class="right" />
+<col  class="org-right" />
 
-<col  class="right" />
+<col  class="org-right" />
 
-<col  class="right" />
+<col  class="org-right" />
 </colgroup>
 <tbody>
 <tr>
-<td class="right">1476</td>
-<td class="right">1284</td>
-<td class="right">1323</td>
-<td class="right">533</td>
+<td class="org-right">1476</td>
+<td class="org-right">1284</td>
+<td class="org-right">1323</td>
+<td class="org-right">533</td>
 </tr>
 </tbody>
 </table>
@@ -561,8 +550,8 @@ On the fourth channel, the relatively small difference between the inter quartil
 </div>
 </div>
 
-<div id="outline-container-sec-4-1-2" class="outline-4">
-<h4 id="sec-4-1-2"><span class="section-number-4">4.1.2</span> Were the data normalized?</h4>
+<div id="outline-container-orgheadline7" class="outline-4">
+<h4 id="orgheadline7"><span class="section-number-4">4.1.2</span> Were the data normalized?</h4>
 <div class="outline-text-4" id="text-4-1-2">
 <p>
 We can check next if some processing like a division by the <i>standard deviation</i> (SD) has been applied:
@@ -570,7 +559,7 @@ We can check next if some processing like a division by the <i>standard deviatio
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="data-standard-deviation">[np.std(x) for x in data]
+<pre class="src src-python" id="orgsrcblock13">[np.std(x) for x in data]
 </pre>
 </div>
 
@@ -587,8 +576,8 @@ So no <code>SD</code> normalization was applied to these data.
 </div>
 </div>
 
-<div id="outline-container-sec-4-1-3" class="outline-4">
-<h4 id="sec-4-1-3"><span class="section-number-4">4.1.3</span> Discretization step amplitude</h4>
+<div id="outline-container-orgheadline8" class="outline-4">
+<h4 id="orgheadline8"><span class="section-number-4">4.1.3</span> Discretization step amplitude</h4>
 <div class="outline-text-4" id="text-4-1-3">
 <p>
 We can easily obtain the size of the digitization set:
@@ -596,7 +585,7 @@ We can easily obtain the size of the digitization set:
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="data-discretization-step-amplitude">[np.min(np.diff(np.sort(np.unique(x)))) for x in data]
+<pre class="src src-python" id="orgsrcblock14">[np.min(np.diff(np.sort(np.unique(x)))) for x in data]
 </pre>
 </div>
 
@@ -611,8 +600,8 @@ As expected since the data are directly in the format generated by the A/D card.
 </div>
 </div>
 
-<div id="outline-container-sec-4-2" class="outline-3">
-<h3 id="sec-4-2"><span class="section-number-3">4.2</span> Plot the data</h3>
+<div id="outline-container-orgheadline10" class="outline-3">
+<h3 id="orgheadline10"><span class="section-number-3">4.2</span> Plot the data</h3>
 <div class="outline-text-3" id="text-4-2">
 <p>
 Plotting the data for interactive exploration is trivial. The only trick is to add (or subtract) a proper offest (that we get here using the maximal value of each channel from our five-number summary), this is automatically implemented in our <code>plot_data_list</code> function:
@@ -632,7 +621,7 @@ The first channel is drawn as is, the second is offset downward by the sum of it
 </p>
 
 
-<div id="fig:WholeRawData" class="figure">
+<div id="orgparagraph1" class="figure">
 <p><img src="img/WholeRawData.png" alt="WholeRawData.png" />
 </p>
 <p><span class="figure-number">Figure 1:</span> The whole (29 s) Locust antennal lobe data set.</p>
@@ -649,7 +638,7 @@ As already discussed, the spikes on the fourth channel (bottom trace) are really
 </div>
 
 
-<div id="fig:First200ms" class="figure">
+<div id="orgparagraph2" class="figure">
 <p><img src="img/First200ms.png" alt="First200ms.png" />
 </p>
 <p><span class="figure-number">Figure 2:</span> First 200 ms of the Locust data set.</p>
@@ -661,8 +650,8 @@ We can also zoom directly in an interactive way from the first plot. Doing that,
 </div>
 </div>
 
-<div id="outline-container-sec-4-3" class="outline-3">
-<h3 id="sec-4-3"><span class="section-number-3">4.3</span> Data renormalization</h3>
+<div id="outline-container-orgheadline11" class="outline-3">
+<h3 id="orgheadline11"><span class="section-number-3">4.3</span> Data renormalization</h3>
 <div class="outline-text-3" id="text-4-3">
 <p>
 We are going to use a <a href="http://en.wikipedia.org/wiki/Median_absolute_deviation">median absolute deviation</a> (<code>MAD</code>) based renormalization. The goal of the procedure is to scale the raw data such that the <i>noise SD</i> is approximately 1. Since it is not straightforward to obtain a noise SD on data where both signal (<i>i.e.</i>, spikes) and noise are present, we use this <a href="http://en.wikipedia.org/wiki/Robust_statistics">robust</a> type of statistic for the SD:
@@ -670,7 +659,7 @@ We are going to use a <a href="http://en.wikipedia.org/wiki/Median_absolute_devi
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="raw-data-mad">data_mad = list(map(swp.mad,data))
+<pre class="src src-python" id="orgsrcblock15">data_mad = list(map(swp.mad,data))
 data_mad
 </pre>
 </div>
@@ -688,7 +677,7 @@ And we normalize accordingly (we also subtract the <code>median</code> which is 
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="raw-data-median">data_median = list(map(np.median,data))
+<pre class="src src-python" id="orgsrcblock16">data_median = list(map(np.median,data))
 data_median
 </pre>
 </div>
@@ -699,14 +688,14 @@ data_median
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="normalize-data">data = list(map(lambda x: (x-np.median(x))/swp.mad(x), data))
+<pre class="src src-python" id="orgsrcblock17">data = list(map(lambda x: (x-np.median(x))/swp.mad(x), data))
 </pre>
 </div>
 </div>
 </div>
 
-<div id="outline-container-sec-4-4" class="outline-3">
-<h3 id="sec-4-4"><span class="section-number-3">4.4</span> Detect valleys</h3>
+<div id="outline-container-orgheadline13" class="outline-3">
+<h3 id="orgheadline13"><span class="section-number-3">4.4</span> Detect valleys</h3>
 <div class="outline-text-3" id="text-4-4">
 <p>
 We are going to filter the data slightly using a "box" filter of length 5. That is, the data points of the original trace are going to be replaced by the average of themselves with their four nearest neighbors. We will then scale the filtered traces such that the <code>MAD</code> is one on each recording sites and keep only the parts of the signal which bellow -3 (I started with -4 but after doing the interactive detection check as described bellow, I decided to reduce the absolute value of the threshold):
@@ -714,7 +703,7 @@ We are going to filter the data slightly using a "box" filter of length 5. That 
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="filter-data">from scipy.signal import fftconvolve
+<pre class="src src-python" id="orgsrcblock18">from scipy.signal import fftconvolve
 from numpy import apply_along_axis as apply 
 data_filtered = apply(lambda x:
                       fftconvolve(x,np.array([1,1,1,1,1])/5.,'same'),
@@ -742,7 +731,7 @@ plt.xlabel('Time (s)')
 </div>
 
 
-<div id="fig:compare-raw-and-filtered-data" class="figure">
+<div id="orgparagraph3" class="figure">
 <p><img src="img/compare-raw-and-filtered-data.png" alt="compare-raw-and-filtered-data.png" />
 </p>
 <p><span class="figure-number">Figure 3:</span> First 200 ms on site 1 of data set <code>data</code>. The raw data are shown in black, the detection threshold appears in dashed blue and the filtered and rectified trace on which spike detection is going to be preformed appears in red.</p>
@@ -754,7 +743,7 @@ We now use function <code>peak</code> on the sum of the rows of our filtered and
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="sp0">sp0 = swp.peak(-data_filtered.sum(0))
+<pre class="src src-python" id="orgsrcblock19">sp0 = swp.peak(-data_filtered.sum(0))
 </pre>
 </div>
 
@@ -763,8 +752,8 @@ Giving <code>2325</code> spikes, a mean inter-event interval of <code>186.0</cod
 </p>
 </div>
 
-<div id="outline-container-sec-4-4-1" class="outline-4">
-<h4 id="sec-4-4-1"><span class="section-number-4">4.4.1</span> Interactive spike detection check</h4>
+<div id="outline-container-orgheadline12" class="outline-4">
+<h4 id="orgheadline12"><span class="section-number-4">4.4.1</span> Interactive spike detection check</h4>
 <div class="outline-text-4" id="text-4-4-1">
 <p>
 We can then check the detection quality with:
@@ -778,7 +767,7 @@ plt.xlim([0,0.2])
 </div>
 
 
-<div id="fig:compare-raw-data-and-detected-spikes" class="figure">
+<div id="orgparagraph4" class="figure">
 <p><img src="img/compare-raw-data-and-detected-spikes.png" alt="compare-raw-data-and-detected-spikes.png" />
 </p>
 <p><span class="figure-number">Figure 4:</span> First 200 ms of data set <code>data</code> (black) with detected spikes (red).</p>
@@ -787,21 +776,17 @@ plt.xlim([0,0.2])
 </div>
 </div>
 
-<div id="outline-container-sec-4-5" class="outline-3">
-<h3 id="sec-4-5"><span class="section-number-3">4.5</span> Cuts</h3>
+<div id="outline-container-orgheadline17" class="outline-3">
+<h3 id="orgheadline17"><span class="section-number-3">4.5</span> Cuts</h3>
 <div class="outline-text-3" id="text-4-5">
 <p>
 After detecting our spikes, we must make our cuts in order to create our events' sample. The obvious question we must first address is: How long should our cuts be? The pragmatic way to get an answer is:
 </p>
 <ul class="org-ul">
-<li>Make cuts much longer than what we think is necessary, like 50 sampling points on both sides of the detected event's time.
-</li>
-<li>Compute robust estimates of the "central" event (with the <code>median</code>) and of the dispersion of the sample around this central event (with the <code>MAD</code>).
-</li>
-<li>Plot the two together and check when does the <code>MAD</code> trace reach the background noise level (at 1 since we have normalized the data).
-</li>
-<li>Having the central event allows us to see if it outlasts significantly the region where the <code>MAD</code> is above the background noise level.
-</li>
+<li>Make cuts much longer than what we think is necessary, like 50 sampling points on both sides of the detected event's time.</li>
+<li>Compute robust estimates of the "central" event (with the <code>median</code>) and of the dispersion of the sample around this central event (with the <code>MAD</code>).</li>
+<li>Plot the two together and check when does the <code>MAD</code> trace reach the background noise level (at 1 since we have normalized the data).</li>
+<li>Having the central event allows us to see if it outlasts significantly the region where the <code>MAD</code> is above the background noise level.</li>
 </ul>
 
 <p>
@@ -832,7 +817,7 @@ plt.plot(evts_mad, color='blue', lw=2)
 </div>
 
 
-<div id="fig:check-MAD-on-long-cuts" class="figure">
+<div id="orgparagraph5" class="figure">
 <p><img src="img/check-MAD-on-long-cuts.png" alt="check-MAD-on-long-cuts.png" />
 </p>
 <p><span class="figure-number">Figure 5:</span> Robust estimates of the central event (red) and of the sample's dispersion around the central event (blue) obtained with "long" (100 sampling points) cuts. We see clearly that the dispersion is back to noise level 10 points before the peak and 30 points after the peak. We also see that <code>data[3]</code> brings very little information (its MAD is essentially flat).</p>
@@ -843,8 +828,8 @@ Fig. \ref{fig:check-MAD-on-long-cuts} clearly shows that starting the cuts 10 po
 </p>
 </div>
 
-<div id="outline-container-sec-4-5-1" class="outline-4">
-<h4 id="sec-4-5-1"><span class="section-number-4">4.5.1</span> Events</h4>
+<div id="outline-container-orgheadline14" class="outline-4">
+<h4 id="orgheadline14"><span class="section-number-4">4.5.1</span> Events</h4>
 <div class="outline-text-4" id="text-4-5-1">
 <p>
 Once we are satisfied with our spike detection, at least in a provisory way, and that we have decided on the length of our cuts, we proceed by making <code>cuts</code> around the detected events. :
@@ -852,7 +837,7 @@ Once we are satisfied with our spike detection, at least in a provisory way, and
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="evts">evts = swp.mk_events(sp0,np.array(data),9,30)
+<pre class="src src-python" id="orgsrcblock20">evts = swp.mk_events(sp0,np.array(data),9,30)
 </pre>
 </div>
 
@@ -867,7 +852,7 @@ We can visualize the first 200 events with:
 </div>
 
 
-<div id="fig:first-200-of-evts" class="figure">
+<div id="orgparagraph6" class="figure">
 <p><img src="img/first-200-of-evts.png" alt="first-200-of-evts.png" />
 </p>
 <p><span class="figure-number">Figure 6:</span> First 200 events of <code>evts</code>. Cuts from the four recording sites appear one after the other. The background (white / grey) changes with the site. In red, <i>robust</i> estimate of the "central" event obtained by computing the pointwise median. In blue, <i>robust</i> estimate of the scale (SD) obtained by computing the pointwise <code>MAD</code>.</p>
@@ -875,18 +860,16 @@ We can visualize the first 200 events with:
 </div>
 </div>
 
-<div id="outline-container-sec-4-5-2" class="outline-4">
-<h4 id="sec-4-5-2"><span class="section-number-4">4.5.2</span> Noise</h4>
+<div id="outline-container-orgheadline15" class="outline-4">
+<h4 id="orgheadline15"><span class="section-number-4">4.5.2</span> Noise</h4>
 <div class="outline-text-4" id="text-4-5-2">
 <p>
 Getting an estimate of the noise statistical properties is an essential ingredient to build respectable goodness of fit tests. In our approach "noise events" are essentially anything that is not an "event" is the sense of the previous section. I wrote essentially and not exactly since there is a little twist here which is the minimal distance we are willing to accept between the reference time of a noise event and the reference time of the last preceding and of the first following "event". We could think that keeping a cut length on each side would be enough. That would indeed be the case if <i>all</i> events were starting from and returning to zero within a cut. But this is not the case with the cuts parameters we chose previously (that will become clear soon). You might wonder why we chose so short a cut length then. Simply to avoid having to deal with too many superposed events which are the really bothering events for anyone wanting to do proper sorting. 
 To obtain our noise events we are going to use function <code>mk_noise</code> which takes the <i>same</i> arguments as function <code>mk_events</code> plus two numbers: 
 </p>
 <ul class="org-ul">
-<li><code>safety_factor</code> a number by which the cut length is multiplied and which sets the minimal distance between the reference times discussed in the previous paragraph.
-</li>
-<li><code>size</code> the maximal number of noise events one wants to cut (the actual number obtained might be smaller depending on the data length, the cut length, the safety factor and the number of events).
-</li>
+<li><code>safety_factor</code> a number by which the cut length is multiplied and which sets the minimal distance between the reference times discussed in the previous paragraph.</li>
+<li><code>size</code> the maximal number of noise events one wants to cut (the actual number obtained might be smaller depending on the data length, the cut length, the safety factor and the number of events).</li>
 </ul>
 
 <p>
@@ -895,7 +878,7 @@ We cut noise events with a rather large safety factor:
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="noise">noise = swp.mk_noise(sp0,np.array(data),10,30,safety_factor=2.5,size=2000)
+<pre class="src src-python" id="orgsrcblock21">noise = swp.mk_noise(sp0,np.array(data),10,30,safety_factor=2.5,size=2000)
 </pre>
 </div>
 
@@ -915,8 +898,8 @@ shows that our "safety factor" was large enough.
 </div>
 </div>
 
-<div id="outline-container-sec-4-5-3" class="outline-4">
-<h4 id="sec-4-5-3"><span class="section-number-4">4.5.3</span> Getting "clean" events</h4>
+<div id="outline-container-orgheadline16" class="outline-4">
+<h4 id="orgheadline16"><span class="section-number-4">4.5.3</span> Getting "clean" events</h4>
 <div class="outline-text-4" id="text-4-5-3">
 <p>
 Our spike sorting has two main stages, the first one consist in estimating a <b>model</b> and the second one consists in using this model to <b>classify</b> the data. Our <b>model</b> is going to be built out of reasonably "clean" events. Here by clean we mean events which are not due to a nearly simultaneous firing of two or more neurons; and simultaneity is defined on the time scale of one of our cuts. When the model will be subsequently used to classify data, events are going to decomposed into their (putative) constituent when they are not "clean", that is, <b>superposition are going to be looked and accounted for</b>. 
@@ -928,7 +911,7 @@ In order to eliminate the most obvious superpositions we are going to use a rath
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="good_evts_fct">def good_evts_fct(samp, thr=3):
+<pre class="src src-python" id="orgsrcblock22">def good_evts_fct(samp, thr=3):
     samp_med = apply(np.median,0,samp)
     samp_mad = apply(swp.mad,0,samp)
     above = samp_med &gt; 0
@@ -948,7 +931,7 @@ We then apply our new function to our sample using a threshold of 9 (after a try
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="goodEvts">goodEvts = good_evts_fct(evts,9)
+<pre class="src src-python" id="orgsrcblock23">goodEvts = good_evts_fct(evts,9)
 </pre>
 </div>
 
@@ -981,11 +964,11 @@ We see that these events are not superpositions and we will work with the whole 
 </div>
 </div>
 
-<div id="outline-container-sec-4-6" class="outline-3">
-<h3 id="sec-4-6"><span class="section-number-3">4.6</span> Dimension reduction</h3>
+<div id="outline-container-orgheadline22" class="outline-3">
+<h3 id="orgheadline22"><span class="section-number-3">4.6</span> Dimension reduction</h3>
 <div class="outline-text-3" id="text-4-6">
-</div><div id="outline-container-sec-4-6-1" class="outline-4">
-<h4 id="sec-4-6-1"><span class="section-number-4">4.6.1</span> Principal Component Analysis (PCA)</h4>
+</div><div id="outline-container-orgheadline18" class="outline-4">
+<h4 id="orgheadline18"><span class="section-number-4">4.6.1</span> Principal Component Analysis (PCA)</h4>
 <div class="outline-text-4" id="text-4-6-1">
 <p>
 Our events are living right now in an 160 dimensional space (our cuts are 40 sampling points long and we are working with 4 recording sites simultaneously). It turns out that it hard for most humans to perceive structures in such spaces. It also hard, not to say impossible with a realistic sample size, to estimate probability densities (which is what model based clustering algorithms are actually doing) in such spaces, unless one is ready to make strong assumptions about these densities. It is therefore usually a good practice to try to reduce the dimension of the <a href="http://en.wikipedia.org/wiki/Sample_space">sample space</a> used to represent the data. We are going to that with <a href="http://en.wikipedia.org/wiki/Principal_component_analysis">principal component analysis</a> (<code>PCA</code>), using it on our "good" events. 
@@ -993,7 +976,7 @@ Our events are living right now in an 160 dimensional space (our cuts are 40 sam
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="PCA">from numpy.linalg import svd
+<pre class="src src-python" id="orgsrcblock24">from numpy.linalg import svd
 varcovmat = np.cov(evts.T)
 u, s, v = svd(varcovmat)
 </pre>
@@ -1005,8 +988,8 @@ With this "back to the roots" approach, <code>u</code> should be an orthonormal 
 </div>
 </div>
 
-<div id="outline-container-sec-4-6-2" class="outline-4">
-<h4 id="sec-4-6-2"><span class="section-number-4">4.6.2</span> Exploring <code>PCA</code> results</h4>
+<div id="outline-container-orgheadline19" class="outline-4">
+<h4 id="orgheadline19"><span class="section-number-4">4.6.2</span> Exploring <code>PCA</code> results</h4>
 <div class="outline-text-4" id="text-4-6-2">
 <p>
 <code>PCA</code> is a rather abstract procedure to most of its users, at least when they start using it. But one way to grasp what it does is to plot the <code>mean event</code> plus or minus, say five times, each principal components like:
@@ -1026,7 +1009,7 @@ for i in range(4):
 </div>
 
 
-<div id="fig:explore-evts-PC0to3" class="figure">
+<div id="orgparagraph7" class="figure">
 <p><img src="img/explore-evts-PC0to3.png" alt="explore-evts-PC0to3.png" />
 </p>
 <p><span class="figure-number">Figure 7:</span> PCA of <code>evts</code> exploration (PC 1 to 4). Each of the 4 graphs shows the mean waveform (black), the mean waveform + 5 x PC (red), the mean - 5 x PC (blue) for each of the first 4 PCs. The fraction of the total variance "explained" by the component appears in the title of each graph.</p>
@@ -1048,7 +1031,7 @@ We now look at the next 4 principal components:
 </div>
 
 
-<div id="fig:explore-evts-PC4to7" class="figure">
+<div id="orgparagraph8" class="figure">
 <p><img src="img/explore-evts-PC4to7.png" alt="explore-evts-PC4to7.png" />
 </p>
 <p><span class="figure-number">Figure 8:</span> PCA of <code>evts</code> exploration (PC 4 to 7). Each of the 4 graphs shows the mean waveform (black), the mean waveform + 5 x PC (red), the mean - 5 x PC (blue). The fraction of the total variance "explained" by the component appears in between parenthesis in the title of each graph.</p>
@@ -1056,8 +1039,8 @@ We now look at the next 4 principal components:
 </div>
 </div>
 
-<div id="outline-container-sec-4-6-3" class="outline-4">
-<h4 id="sec-4-6-3"><span class="section-number-4">4.6.3</span> Static representation of the projected data</h4>
+<div id="outline-container-orgheadline20" class="outline-4">
+<h4 id="orgheadline20"><span class="section-number-4">4.6.3</span> Static representation of the projected data</h4>
 <div class="outline-text-4" id="text-4-6-3">
 <p>
 We can build a <code>scatter plot matrix</code> showing the projections of our "good" events sample onto the plane defined by pairs of the few first PCs:
@@ -1065,7 +1048,7 @@ We can build a <code>scatter plot matrix</code> showing the projections of our "
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="scatter-plot-matrix-on-PC">evts_good_P0_to_P3 = np.dot(evts,u[:,0:4])
+<pre class="src src-python" id="orgsrcblock25">evts_good_P0_to_P3 = np.dot(evts,u[:,0:4])
 from pandas.tools.plotting import scatter_matrix
 import pandas as pd
 df = pd.DataFrame(evts_good_P0_to_P3)
@@ -1082,8 +1065,8 @@ scatter_matrix(df,alpha=0.2,s=4,c='k',figsize=(6,6),
 </div>
 </div>
 
-<div id="outline-container-sec-4-6-4" class="outline-4">
-<h4 id="sec-4-6-4"><span class="section-number-4">4.6.4</span> Dynamic visualization of the data with <code>GGobi</code></h4>
+<div id="outline-container-orgheadline21" class="outline-4">
+<h4 id="orgheadline21"><span class="section-number-4">4.6.4</span> Dynamic visualization of the data with <code>GGobi</code></h4>
 <div class="outline-text-4" id="text-4-6-4">
 <p>
 The best way to discern structures in "high dimensional" data is to dynamically visualize them. To this end, the tool of choice is <a href="http://www.ggobi.org/">GGobi</a>, an open source software available on <code>Linux</code>, <code>Windows</code> and <code>MacOS</code>. We start by exporting our data in <code>csv</code> format to our disk:
@@ -1091,7 +1074,7 @@ The best way to discern structures in "high dimensional" data is to dynamically 
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="ToGGobi1">import csv
+<pre class="src src-python" id="orgsrcblock26">import csv
 g = open('evts.csv','w')
 w = csv.writer(g)
 w.writerows(np.dot(evts,u[:,:6]))
@@ -1103,34 +1086,21 @@ g.close()
 The following terse procedure should allow the reader to get going with <code>GGobi</code>:
 </p>
 <ul class="org-ul">
-<li>Launch <code>GGobi</code>
-</li>
-<li>In menu: <code>File</code> -&gt; <code>Open</code>, select <code>evtsE.csv</code>.
-</li>
+<li>Launch <code>GGobi</code></li>
+<li>In menu: <code>File</code> -&gt; <code>Open</code>, select <code>evtsE.csv</code>.</li>
 <li>Since the glyphs are rather large, start by changing them for smaller ones:
 <ul class="org-ul">
-<li>Go to menu: <code>Interaction</code> -&gt; <code>Brush</code>.
-</li>
-<li>On the Brush panel which appeared check the <code>Persistent</code> box.
-</li>
-<li>Click on <code>Choose color &amp; glyph...</code>.
-</li>
-<li>On the chooser which pops out, click on the small dot on the upper left of the left panel.
-</li>
-<li>Go back to the window with the data points.
-</li>
-<li>Right click on the lower right corner of the rectangle which appeared on the figure after you selected <code>Brush</code>.
-</li>
-<li>Dragg the rectangle corner in order to cover the whole set of points.
-</li>
-<li>Go back to the <code>Interaction</code> menu and select the first row to go back where you were at the start.
-</li>
-</ul>
-</li>
-<li>Select menu: <code>View</code> -&gt; <code>Rotation</code>.
-</li>
-<li>Adjust the speed of the rotation in order to see things properly.
-</li>
+<li>Go to menu: <code>Interaction</code> -&gt; <code>Brush</code>.</li>
+<li>On the Brush panel which appeared check the <code>Persistent</code> box.</li>
+<li>Click on <code>Choose color &amp; glyph...</code>.</li>
+<li>On the chooser which pops out, click on the small dot on the upper left of the left panel.</li>
+<li>Go back to the window with the data points.</li>
+<li>Right click on the lower right corner of the rectangle which appeared on the figure after you selected <code>Brush</code>.</li>
+<li>Dragg the rectangle corner in order to cover the whole set of points.</li>
+<li>Go back to the <code>Interaction</code> menu and select the first row to go back where you were at the start.</li>
+</ul></li>
+<li>Select menu: <code>View</code> -&gt; <code>Rotation</code>.</li>
+<li>Adjust the speed of the rotation in order to see things properly.</li>
 </ul>
 
 <p>
@@ -1140,8 +1110,8 @@ We easily discern 7 rather well separated clusters. Meaning that an automatic cl
 </div>
 </div>
 
-<div id="outline-container-sec-4-7" class="outline-3">
-<h3 id="sec-4-7"><span class="section-number-3">4.7</span> Clustering with K-Means</h3>
+<div id="outline-container-orgheadline28" class="outline-3">
+<h3 id="orgheadline28"><span class="section-number-3">4.7</span> Clustering with K-Means</h3>
 <div class="outline-text-3" id="text-4-7">
 <p>
 Since our dynamic visualization shows 7 well separated clusters in 3 dimensions, a simple <a href="http://en.wikipedia.org/wiki/K-means_clustering">k-means</a> is worth trying (even if some clusters look a bit "elongated"). We are using here the <a href="http://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html#sklearn.cluster.KMeans">KMeans</a> class of <a href="http://scikit-learn.org/stable/index.html">scikit-learn</a>: 
@@ -1149,7 +1119,7 @@ Since our dynamic visualization shows 7 well separated clusters in 3 dimensions,
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="KMEANS">from sklearn.cluster import KMeans
+<pre class="src src-python" id="orgsrcblock27">from sklearn.cluster import KMeans
 km7 = KMeans(n_clusters=7, init='k-means++', n_init=100, max_iter=100)
 km7.fit(np.dot(evts,u[:,0:3]))
 c7 = km7.fit_predict(np.dot(evts,u[:,0:3]))
@@ -1162,7 +1132,7 @@ In order to facilitate comparison when models with different numbers of clusters
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="c7b">cluster_median = list([(i,
+<pre class="src src-python" id="orgsrcblock28">cluster_median = list([(i,
                         np.apply_along_axis(np.median,0,
                                             evts[c7 == i,:]))
                                             for i in range(7)
@@ -1175,8 +1145,8 @@ c7b = [new_order_reverse[i] for i in c7]
 </div>
 </div>
 
-<div id="outline-container-sec-4-7-1" class="outline-4">
-<h4 id="sec-4-7-1"><span class="section-number-4">4.7.1</span> Cluster specific plots</h4>
+<div id="outline-container-orgheadline23" class="outline-4">
+<h4 id="orgheadline23"><span class="section-number-4">4.7.1</span> Cluster specific plots</h4>
 <div class="outline-text-4" id="text-4-7-1">
 <p>
 Looking at the first 4 clusters we get Fig. \ref{fig:events-clusters0to3} with:
@@ -1200,7 +1170,7 @@ plt.ylim([-20,15])
 </div>
 
 
-<div id="fig:events-clusters0to3" class="figure">
+<div id="orgparagraph9" class="figure">
 <p><img src="img/events-clusters0to3.png" alt="events-clusters0to3.png" />
 </p>
 <p><span class="figure-number">Figure 10:</span> First 4 clusters. Cluster 0 at the top, cluster 4 at the bottom. Red, cluster specific central / median event. Blue, cluster specific <code>MAD</code>.</p>
@@ -1225,7 +1195,7 @@ plt.ylim([-10,5])
 </div>
 
 
-<div id="fig:events-clusters4to6" class="figure">
+<div id="orgparagraph10" class="figure">
 <p><img src="img/events-clusters4to6.png" alt="events-clusters4to6.png" />
 </p>
 <p><span class="figure-number">Figure 11:</span> Last 3 clusters. Cluster 4 at the top, cluster 6 at the bottom. Red, cluster specific central / median event. Blue, cluster specific <code>MAD</code>. Notice the change in ordinate scale compared to the previous figure.</p>
@@ -1237,8 +1207,8 @@ The top (cluster 4) and bottom (cluster 6) clusters look similar.
 </div>
 </div>
 
-<div id="outline-container-sec-4-7-2" class="outline-4">
-<h4 id="sec-4-7-2"><span class="section-number-4">4.7.2</span> Results inspection with <code>GGobi</code></h4>
+<div id="outline-container-orgheadline24" class="outline-4">
+<h4 id="orgheadline24"><span class="section-number-4">4.7.2</span> Results inspection with <code>GGobi</code></h4>
 <div class="outline-text-4" id="text-4-7-2">
 <p>
 We start by checking our clustering quality with <code>GGobi</code>. To this end we export the data and the labels of each event:
@@ -1246,7 +1216,7 @@ We start by checking our clustering quality with <code>GGobi</code>. To this end
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="ToGGobi2">g = open('evts_sorted.csv','w')
+<pre class="src src-python" id="orgsrcblock29">g = open('evts_sorted.csv','w')
 w = csv.writer(g)
 w.writerows(np.concatenate((np.dot(evts,u[:,:6]),
                             np.array([c7b]).T),
@@ -1259,18 +1229,12 @@ g.close()
 An again succinct description of how to do the dynamical visual check is:
 </p>
 <ul class="org-ul">
-<li>Load the new data into GGobi like before.
-</li>
-<li>In menu: <code>Display</code> -&gt; <code>New Scatterplot Display</code>, select <code>evtsEsorted.csv</code>.
-</li>
-<li>Change the glyphs like before.
-</li>
-<li>In menu: <code>Tools</code> -&gt; <code>Color Schemes</code>, select a scheme with 10 colors, like <code>Spectral</code>, <code>Spectral 10</code>.
-</li>
-<li>In menu: <code>Tools</code> -&gt; <code>Automatic Brushing</code>, select <code>evtsEsorted.csv</code> tab and, within this tab, select variable <code>c10b</code>. Then click on <code>Apply</code>.
-</li>
-<li>Select <code>View</code> -&gt; <code>Rotation</code> like before and see your result. 
-</li>
+<li>Load the new data into GGobi like before.</li>
+<li>In menu: <code>Display</code> -&gt; <code>New Scatterplot Display</code>, select <code>evtsEsorted.csv</code>.</li>
+<li>Change the glyphs like before.</li>
+<li>In menu: <code>Tools</code> -&gt; <code>Color Schemes</code>, select a scheme with 10 colors, like <code>Spectral</code>, <code>Spectral 10</code>.</li>
+<li>In menu: <code>Tools</code> -&gt; <code>Automatic Brushing</code>, select <code>evtsEsorted.csv</code> tab and, within this tab, select variable <code>c10b</code>. Then click on <code>Apply</code>.</li>
+<li>Select <code>View</code> -&gt; <code>Rotation</code> like before and see your result.</li>
 </ul>
 
 <p>
@@ -1279,8 +1243,8 @@ We see on this dynamic display that clusters 4 and 6 do form a continuum.
 </div>
 </div>
 
-<div id="outline-container-sec-4-7-3" class="outline-4">
-<h4 id="sec-4-7-3"><span class="section-number-4">4.7.3</span> Preliminary conclusion</h4>
+<div id="outline-container-orgheadline25" class="outline-4">
+<h4 id="orgheadline25"><span class="section-number-4">4.7.3</span> Preliminary conclusion</h4>
 <div class="outline-text-4" id="text-4-7-3">
 <p>
 At this stage it seems reasonable to split cluster 1 in two and to fuse clusters 4 and 6. 
@@ -1288,12 +1252,12 @@ At this stage it seems reasonable to split cluster 1 in two and to fuse clusters
 </div>
 </div>
 
-<div id="outline-container-sec-4-7-4" class="outline-4">
-<h4 id="sec-4-7-4"><span class="section-number-4">4.7.4</span> Splitting cluster 1 in two</h4>
+<div id="outline-container-orgheadline26" class="outline-4">
+<h4 id="orgheadline26"><span class="section-number-4">4.7.4</span> Splitting cluster 1 in two</h4>
 <div class="outline-text-4" id="text-4-7-4">
 <div class="org-src-container">
 
-<pre class="src src-python" id="KMEANS-on-cluster-1">km2 = KMeans(n_clusters=2, init='k-means++', n_init=100, max_iter=100)
+<pre class="src src-python" id="orgsrcblock30">km2 = KMeans(n_clusters=2, init='k-means++', n_init=100, max_iter=100)
 km2.fit(np.dot(evts[np.array(c7b) == 1,:],u[:,0:3]))
 c2 = km2.fit_predict(np.dot(evts[np.array(c7b) == 1,:],u[:,0:3]))
 cluster_median2 = list([(i,
@@ -1324,7 +1288,7 @@ plt.ylim([-20,15])
 </div>
 
 
-<div id="fig:events-cluster1split" class="figure">
+<div id="orgparagraph11" class="figure">
 <p><img src="img/events-cluster1split.png" alt="events-cluster1split.png" />
 </p>
 <p><span class="figure-number">Figure 12:</span> The results of splitting cluster 1 in two clusters with kmeans.</p>
@@ -1368,7 +1332,7 @@ plt.ylim([-20,15])
 </div>
 
 
-<div id="fig:events-cluster1splitGMM" class="figure">
+<div id="orgparagraph12" class="figure">
 <p><img src="img/events-cluster1splitGMM.png" alt="events-cluster1splitGMM.png" />
 </p>
 <p><span class="figure-number">Figure 13:</span> The results of splitting cluster 1 in two clusters with a GMM.</p>
@@ -1380,8 +1344,8 @@ This does what we wanted. That also suggests that redoing our initial clustering
 </div>
 </div>
 
-<div id="outline-container-sec-4-7-5" class="outline-4">
-<h4 id="sec-4-7-5"><span class="section-number-4">4.7.5</span> Construction of a labeling with 8 units</h4>
+<div id="outline-container-orgheadline27" class="outline-4">
+<h4 id="orgheadline27"><span class="section-number-4">4.7.5</span> Construction of a labeling with 8 units</h4>
 <div class="outline-text-4" id="text-4-7-5">
 <p>
 We will go further from this point by splitting the second cluster in two as we just did. The eighth cluster is going to be the less numerous of the two we just obtained.
@@ -1389,7 +1353,7 @@ We will go further from this point by splitting the second cluster in two as we 
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="labeling-with-8">c8 = c7b.copy()
+<pre class="src src-python" id="orgsrcblock31">c8 = c7b.copy()
 B_idx = 0
 for idx in range(len(c8)):
     if c8[idx] == 1:
@@ -1402,21 +1366,17 @@ for idx in range(len(c8)):
 </div>
 </div>
 
-<div id="outline-container-sec-4-8" class="outline-3">
-<h3 id="sec-4-8"><span class="section-number-3">4.8</span> Spike "peeling": a "Brute force" superposition resolution</h3>
+<div id="outline-container-orgheadline34" class="outline-3">
+<h3 id="orgheadline34"><span class="section-number-3">4.8</span> Spike "peeling": a "Brute force" superposition resolution</h3>
 <div class="outline-text-3" id="text-4-8">
 <p>
 We are going to resolve (the most "obvious") superpositions by a "recursive peeling method":
 </p>
 <ol class="org-ol">
-<li>Events are detected and cut from the raw data <i>or from an already peeled version of the data</i>.
-</li>
-<li>The closest center (in term of Euclidean distance) to the event is found.
-</li>
-<li>If the residual sum of squares (<code>RSS</code>), that is: (actual data - best center)\(^2\), is smaller than the squared norm of a cut, the best center is subtracted from the data on which detection was performed&#x2014;jitter is again compensated for at this stage.
-</li>
-<li>Go back to step 1 or stop. 
-</li>
+<li>Events are detected and cut from the raw data <i>or from an already peeled version of the data</i>.</li>
+<li>The closest center (in term of Euclidean distance) to the event is found.</li>
+<li>If the residual sum of squares (<code>RSS</code>), that is: (actual data - best center)\(^2\), is smaller than the squared norm of a cut, the best center is subtracted from the data on which detection was performed&#x2014;jitter is again compensated for at this stage.</li>
+<li>Go back to step 1 or stop.</li>
 </ol>
 
 <p>
@@ -1425,7 +1385,7 @@ To apply this procedure, we need, for each cluster, estimates of its center and 
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="centers">centers = { "Cluster " + str(i) :
+<pre class="src src-python" id="orgsrcblock32">centers = { "Cluster " + str(i) :
             swp.mk_center_dictionary(sp0[np.array(c8)==i],
                                      np.array(data))
             for i in range(8)}
@@ -1433,8 +1393,8 @@ To apply this procedure, we need, for each cluster, estimates of its center and 
 </div>
 </div>
 
-<div id="outline-container-sec-4-8-1" class="outline-4">
-<h4 id="sec-4-8-1"><span class="section-number-4">4.8.1</span> First peeling</h4>
+<div id="outline-container-orgheadline29" class="outline-4">
+<h4 id="orgheadline29"><span class="section-number-4">4.8.1</span> First peeling</h4>
 <div class="outline-text-4" id="text-4-8-1">
 <p>
 Function <code>classify_and_align_evt</code> is used next. For each detected event, it matches the closest template, correcting for the jitter, if the closest template is close enough:
@@ -1456,7 +1416,7 @@ We can use the function on every detected event. A trick here is to store the ma
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="round0">data0 = np.array(data) 
+<pre class="src src-python" id="orgsrcblock33">data0 = np.array(data) 
 round0 = [swp.classify_and_align_evt(sp0[i],data0,centers)
           for i in range(len(sp0))]
 </pre>
@@ -1482,13 +1442,13 @@ Using function <code>predict_data</code>, we create an ideal data trace given ev
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="pred0">pred0 = swp.predict_data(round0,centers,data0.shape[0],data0.shape[1])
+<pre class="src src-python" id="orgsrcblock34">pred0 = swp.predict_data(round0,centers,data0.shape[0],data0.shape[1])
 </pre>
 </div>
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="data1">data1 = data0 - pred0
+<pre class="src src-python" id="orgsrcblock35">data1 = data0 - pred0
 </pre>
 </div>
 
@@ -1512,7 +1472,7 @@ plt.xlim([2.45,2.55])
 </div>
 
 
-<div id="fig:FirstPeeling" class="figure">
+<div id="orgparagraph13" class="figure">
 <p><img src="img/FirstPeeling.png" alt="FirstPeeling.png" />
 </p>
 <p><span class="figure-number">Figure 14:</span> 100 ms of data. Black, original data; red, after first peeling.</p>
@@ -1520,8 +1480,8 @@ plt.xlim([2.45,2.55])
 </div>
 </div>
 
-<div id="outline-container-sec-4-8-2" class="outline-4">
-<h4 id="sec-4-8-2"><span class="section-number-4">4.8.2</span> Second peeling</h4>
+<div id="outline-container-orgheadline30" class="outline-4">
+<h4 id="orgheadline30"><span class="section-number-4">4.8.2</span> Second peeling</h4>
 <div class="outline-text-4" id="text-4-8-2">
 <p>
 We then take <code>data1</code> as our former <code>data0</code> and we repeat the procedure. We do it with slight modifications: detection is done on a single recording site and a shorter filter length is used before detecting the events. Doing detection on a single site (here site 0) allows us to correct some drawbacks of our crude spike detection method. When we used it the first time we summed the filtered and rectified versions of the data before looking at peaks. This summation can lead to badly defined spike times when two neurons that are large on different recording sites, say site 0 and site 1 fire at nearly the same time. The summed event can then have a peak in between the two true peaks and our jitter correction cannot resolve that. We are therefore going to perform detection on the different sites. The jitter estimation and the subtraction are always going to be done on the 4 recording sites:
@@ -1529,7 +1489,7 @@ We then take <code>data1</code> as our former <code>data0</code> and we repeat t
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="sp1">data_filtered = np.apply_along_axis(lambda x:
+<pre class="src src-python" id="orgsrcblock36">data_filtered = np.apply_along_axis(lambda x:
                                     fftconvolve(x,np.array([1,1,1])/3.,
                                                 'same'),
                                     1,data1)
@@ -1547,7 +1507,7 @@ We classify the events and obtain the new prediction and the new "data":
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="round1-pred1-data2">round1 = [swp.classify_and_align_evt(sp1[i],data1,centers)
+<pre class="src src-python" id="orgsrcblock37">round1 = [swp.classify_and_align_evt(sp1[i],data1,centers)
           for i in range(len(sp1))]
 pred1 = swp.predict_data(round1,centers,data1.shape[0],data1.shape[1])
 data2 = data1 - pred1
@@ -1588,7 +1548,7 @@ plt.xlim([2.45,2.55])
 </div>
 
 
-<div id="fig:SecondPeeling" class="figure">
+<div id="orgparagraph14" class="figure">
 <p><img src="img/SecondPeeling.png" alt="SecondPeeling.png" />
 </p>
 <p><span class="figure-number">Figure 15:</span> 100 ms of data. Black, first peeling; red, second peeling.</p>
@@ -1596,8 +1556,8 @@ plt.xlim([2.45,2.55])
 </div>
 </div>
 
-<div id="outline-container-sec-4-8-3" class="outline-4">
-<h4 id="sec-4-8-3"><span class="section-number-4">4.8.3</span> Third peeling</h4>
+<div id="outline-container-orgheadline31" class="outline-4">
+<h4 id="orgheadline31"><span class="section-number-4">4.8.3</span> Third peeling</h4>
 <div class="outline-text-4" id="text-4-8-3">
 <p>
 We take <code>data2</code> as our former <code>data1</code> and we repeat the procedure detecting on channel 1, but we want to do it in a more compact form and we write a dedicated function to do so:
@@ -1605,7 +1565,7 @@ We take <code>data2</code> as our former <code>data1</code> and we repeat the pr
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="peel-definition">def peel(input_data,
+<pre class="src src-python" id="orgsrcblock38">def peel(input_data,
          chan4detection,
          detection_filter_length = 3,
          detection_threshold = -3,
@@ -1669,7 +1629,7 @@ We take <code>data2</code> as our former <code>data1</code> and we repeat the pr
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="round2-and-data3">round2, data3 = peel(data2,1,3,-3,centers)
+<pre class="src src-python" id="orgsrcblock39">round2, data3 = peel(data2,1,3,-3,centers)
 </pre>
 </div>
 
@@ -1706,7 +1666,7 @@ plt.xlim([16.15,16.25])
 </div>
 
 
-<div id="fig:ThirdPeeling" class="figure">
+<div id="orgparagraph15" class="figure">
 <p><img src="img/ThirdPeeling.png" alt="ThirdPeeling.png" />
 </p>
 <p><span class="figure-number">Figure 16:</span> 100 ms of data. Black, second peeling; red, third peeling.</p>
@@ -1714,8 +1674,8 @@ plt.xlim([16.15,16.25])
 </div>
 </div>
 
-<div id="outline-container-sec-4-8-4" class="outline-4">
-<h4 id="sec-4-8-4"><span class="section-number-4">4.8.4</span> Fourth peeling</h4>
+<div id="outline-container-orgheadline32" class="outline-4">
+<h4 id="orgheadline32"><span class="section-number-4">4.8.4</span> Fourth peeling</h4>
 <div class="outline-text-4" id="text-4-8-4">
 <p>
 We take <code>data3</code> as our former <code>data2</code> and we repeat the procedure detecting on channel 2:
@@ -1723,7 +1683,7 @@ We take <code>data3</code> as our former <code>data2</code> and we repeat the pr
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="round3-and-data4">round3, data4 = peel(data3,2,3,-3,centers)
+<pre class="src src-python" id="orgsrcblock40">round3, data4 = peel(data3,2,3,-3,centers)
 </pre>
 </div>
 
@@ -1760,7 +1720,7 @@ plt.xlim([17.5,17.6])
 </div>
 
 
-<div id="fig:FourthPeeling" class="figure">
+<div id="orgparagraph16" class="figure">
 <p><img src="img/FourthPeeling.png" alt="FourthPeeling.png" />
 </p>
 <p><span class="figure-number">Figure 17:</span> 100 ms of the locust data set (different time frame than on the previous plot). Black, third peeling; red, fourth peeling.</p>
@@ -1768,8 +1728,8 @@ plt.xlim([17.5,17.6])
 </div>
 </div>
 
-<div id="outline-container-sec-4-8-5" class="outline-4">
-<h4 id="sec-4-8-5"><span class="section-number-4">4.8.5</span> General comparison</h4>
+<div id="outline-container-orgheadline33" class="outline-4">
+<h4 id="orgheadline33"><span class="section-number-4">4.8.5</span> General comparison</h4>
 <div class="outline-text-4" id="text-4-8-5">
 <p>
 We can compare the raw data with the fourth peeling on the first second (Fig. \ref{fig:RawVSFourthPeeling}):
@@ -1791,7 +1751,7 @@ plt.xlim([0,1])
 </div>
 
 
-<div id="fig:RawVSFourthPeeling" class="figure">
+<div id="orgparagraph17" class="figure">
 <p><img src="img/RawVSFourthPeeling.png" alt="RawVSFourthPeeling.png" />
 </p>
 <p><span class="figure-number">Figure 18:</span> The first second of the locust data set. Black, raw data; red, fourth peeling.</p>
@@ -1810,7 +1770,7 @@ swp.plot_events(r3BE)
 </div>
 
 
-<div id="fig:FourthPeelingRemainingBad" class="figure">
+<div id="orgparagraph18" class="figure">
 <p><img src="img/FourthPeelingRemainingBad.png" alt="FourthPeelingRemainingBad.png" />
 </p>
 <p><span class="figure-number">Figure 19:</span> The 52 remaining bad events after the fourth peeling.</p>
@@ -1819,8 +1779,8 @@ swp.plot_events(r3BE)
 </div>
 </div>
 
-<div id="outline-container-sec-4-9" class="outline-3">
-<h3 id="sec-4-9"><span class="section-number-3">4.9</span> Getting the spike trains</h3>
+<div id="outline-container-orgheadline35" class="outline-3">
+<h3 id="orgheadline35"><span class="section-number-3">4.9</span> Getting the spike trains</h3>
 <div class="outline-text-3" id="text-4-9">
 <p>
 Once we have decided to stop the peeling iterations we can extract our spike trains with (notice the syntax difference between <code>Python 3</code> and <code>Python 2</code>):
@@ -1828,7 +1788,7 @@ Once we have decided to stop the peeling iterations we can extract our spike tra
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="spike_trains">try:
+<pre class="src src-python" id="orgsrcblock41">try:
     round_all = round0.copy() # Python 3
 except AttributeError:
     round_all = round0[:] # Python 2
@@ -1869,74 +1829,50 @@ Keep in mind that clusters 4 and 6 are very close to noise level and should not 
 </div>
 </div>
 
-<div id="outline-container-sec-5" class="outline-2">
-<h2 id="sec-5"><span class="section-number-2">5</span> Defining classes and methods for a systematic analysis of the remaining of the experiment</h2>
+<div id="outline-container-orgheadline43" class="outline-2">
+<h2 id="orgheadline43"><span class="section-number-2">5</span> Defining classes and methods for a systematic analysis of the remaining of the experiment</h2>
 <div class="outline-text-2" id="text-5">
 <p>
 At that stage we want to take the next epoch of 29 seconds of spontaneous activity and, using our "templates catalog", <code>centers</code>, recursively detect spikes, subtract the closest catalog member, until there is "nothing left". To track potential electrode drifts resulting in clusters waveform changes, we want, after the classification of each epoch, to recompute the median of each cluster as long as the latter as enough associated events or make a compromise between the former median and the new one when there aren't enough associated events. Do do all that, we don't want to type as many command lines as we just did; that's why we are going to introduce some classes and associated methods.
 </p>
 </div>
 
-<div id="outline-container-sec-5-1" class="outline-3">
-<h3 id="sec-5-1"><span class="section-number-3">5.1</span> MultiChannelData Class</h3>
+<div id="outline-container-orgheadline38" class="outline-3">
+<h3 id="orgheadline38"><span class="section-number-3">5.1</span> MultiChannelData Class</h3>
 <div class="outline-text-3" id="text-5-1">
 <p>
 We start with a <code>Class</code> that we call <code>MultiChannelData</code>. In general we think of using it to store and display multi-channel data (like data from a tetrode), but we will design it to work with single channel data as well. The class objects have the following attributes:
 </p>
 <ul class="org-ul">
-<li><code>data</code>: an alias (pointer) to the data stored a <code>numpy</code> matrix with as many rows as channels and as many columns as sampling points.
-</li>
-<li><code>start</code>: the time (in seconds) of the first sampling point.
-</li>
-<li><code>sampling_rate</code>: the sampling rate in Hz.
-</li>
-<li><code>channel_names</code>: a list of strings with the channel names.
-</li>
-<li><code>nb_channels</code>: the number of channels.
-</li>
-<li><code>duration</code>: the data length (in seconds) referred to by the object.
-</li>
-<li><code>median</code>: a vector with as many elements as channels containing the median computed on each channel.
-</li>
-<li><code>mad</code>: a vector with as many elements as channels containing the median absolute deviation computed on each channel.
-</li>
-<li><code>mean</code>: a vector with as many elements as channels containing the mean computed on each channel.
-</li>
-<li><code>std</code>: a vector with as many elements as channels containing the standard deviation computed on each channel.
-</li>
-<li><code>variance</code>: a vector with as many elements as channels containing the variance computed on each channel.
-</li>
-<li><code>ptp</code>: a vector with as many elements as channels containing the peak to peak difference computed on each channel.
-</li>
+<li><code>data</code>: an alias (pointer) to the data stored a <code>numpy</code> matrix with as many rows as channels and as many columns as sampling points.</li>
+<li><code>start</code>: the time (in seconds) of the first sampling point.</li>
+<li><code>sampling_rate</code>: the sampling rate in Hz.</li>
+<li><code>channel_names</code>: a list of strings with the channel names.</li>
+<li><code>nb_channels</code>: the number of channels.</li>
+<li><code>duration</code>: the data length (in seconds) referred to by the object.</li>
+<li><code>median</code>: a vector with as many elements as channels containing the median computed on each channel.</li>
+<li><code>mad</code>: a vector with as many elements as channels containing the median absolute deviation computed on each channel.</li>
+<li><code>mean</code>: a vector with as many elements as channels containing the mean computed on each channel.</li>
+<li><code>std</code>: a vector with as many elements as channels containing the standard deviation computed on each channel.</li>
+<li><code>variance</code>: a vector with as many elements as channels containing the variance computed on each channel.</li>
+<li><code>ptp</code>: a vector with as many elements as channels containing the peak to peak difference computed on each channel.</li>
 </ul>
 <p>
 The following methods can be called:
 </p>
 <ul class="org-ul">
-<li><code>sample2time</code>: given a sample point, returns the corresponding time.
-</li>
-<li><code>time2sample</code>: given a time, returns a sampling point.
-</li>
-<li><code>quantiles</code>: given a vector of probabilities, returns a vector with the corresponding empirical quantiles.
-</li>
-<li><code>copy</code>: returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object (the data referred to are then actually copied).
-</li>
-<li><code>plot</code>: create a plot showing the data.
-</li>
-<li><code>offset</code>: given a vector with as many elements as recording channels, returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied and offset.
-</li>
-<li><code>scale</code>:  given a vector with as many elements as recording channels, returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied and scaled.
-</li>
-<li><code>normalize</code>: returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied offset by the median and scaled by the MAD.
-</li>
-<li><code>derivative</code>: returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied and differentiated using the central difference and using the sampling period as a time unit.
-</li>
-<li><code>box_filter</code>: returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied and box filtered.
-</li>
-<li><code>rectify</code>: returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied and rectified.
-</li>
-<li><code>find_extrema</code>: returns a vector or a dictionary containing local extrema locations.
-</li>
+<li><code>sample2time</code>: given a sample point, returns the corresponding time.</li>
+<li><code>time2sample</code>: given a time, returns a sampling point.</li>
+<li><code>quantiles</code>: given a vector of probabilities, returns a vector with the corresponding empirical quantiles.</li>
+<li><code>copy</code>: returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object (the data referred to are then actually copied).</li>
+<li><code>plot</code>: create a plot showing the data.</li>
+<li><code>offset</code>: given a vector with as many elements as recording channels, returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied and offset.</li>
+<li><code>scale</code>:  given a vector with as many elements as recording channels, returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied and scaled.</li>
+<li><code>normalize</code>: returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied offset by the median and scaled by the MAD.</li>
+<li><code>derivative</code>: returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied and differentiated using the central difference and using the sampling period as a time unit.</li>
+<li><code>box_filter</code>: returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied and box filtered.</li>
+<li><code>rectify</code>: returns a new instance / object of <code>MultiChannelData</code> containing a copy of the original object where the data referred to have been copied and rectified.</li>
+<li><code>find_extrema</code>: returns a vector or a dictionary containing local extrema locations.</li>
 </ul>
 <p>
 A length (<code>len</code>) special method is defined, a <code>print</code> special method is defined returning a short written summary of the instance content and subsetting can be performed on the object like on a "classical" matrix.  
@@ -1944,7 +1880,7 @@ A length (<code>len</code>) special method is defined, a <code>print</code> spec
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="MultiChannelData-Class-defintion">class MultiChannelData:
+<pre class="src src-python" id="orgsrcblock42">class MultiChannelData:
     """Mutli- or Single- channel data."""
     def __init__(self, data, channel_names, start=0, sampling_rate=15000):
         """Create a new MultiChannelData instance.
@@ -2235,8 +2171,8 @@ A length (<code>len</code>) special method is defined, a <code>print</code> spec
 </div>
 </div>
 
-<div id="outline-container-sec-5-1-1" class="outline-4">
-<h4 id="sec-5-1-1"><span class="section-number-4">5.1.1</span> Example of use</h4>
+<div id="outline-container-orgheadline37" class="outline-4">
+<h4 id="orgheadline37"><span class="section-number-4">5.1.1</span> Example of use</h4>
 <div class="outline-text-4" id="text-5-1-1">
 <p>
 We could get the equivalent of our previous <code>data</code> list with:
@@ -2244,7 +2180,7 @@ We could get the equivalent of our previous <code>data</code> list with:
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="MultiChannelData-instanciation-example">Data = MultiChannelData([hdf['Continuous_1']['trial_01'][name][...] for name in ['ch09','ch11','ch13','ch16']],
+<pre class="src src-python" id="orgsrcblock43">Data = MultiChannelData([hdf['Continuous_1']['trial_01'][name][...] for name in ['ch09','ch11','ch13','ch16']],
                         ['ch09','ch11','ch13','ch16'])
 </pre>
 </div>
@@ -2255,7 +2191,7 @@ We can then get a short written summary of the instance content with:
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="MultiChannelData-print-example">print(Data)
+<pre class="src src-python" id="orgsrcblock44">print(Data)
 </pre>
 </div>
 
@@ -2279,7 +2215,7 @@ The peak to peak difference is obtained with:
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="MultiChannelData-ptp-example">Data.ptp
+<pre class="src src-python" id="orgsrcblock45">Data.ptp
 </pre>
 </div>
 
@@ -2287,20 +2223,20 @@ The peak to peak difference is obtained with:
 
 
 <colgroup>
-<col  class="right" />
+<col  class="org-right" />
 
-<col  class="right" />
+<col  class="org-right" />
 
-<col  class="right" />
+<col  class="org-right" />
 
-<col  class="right" />
+<col  class="org-right" />
 </colgroup>
 <tbody>
 <tr>
-<td class="right">1476</td>
-<td class="right">1284</td>
-<td class="right">1323</td>
-<td class="right">533</td>
+<td class="org-right">1476</td>
+<td class="org-right">1284</td>
+<td class="org-right">1323</td>
+<td class="org-right">533</td>
 </tr>
 </tbody>
 </table>
@@ -2311,7 +2247,7 @@ We could get the five-number summary with (not shown):
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="MultiChannelData-quantiles-example">Data.quantiles()
+<pre class="src src-python" id="orgsrcblock46">Data.quantiles()
 </pre>
 </div>
 
@@ -2321,7 +2257,7 @@ The documentation of the <code>plot</code> method can be obtained with:
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="MultiChannelData-plot-doc">help(Data.plot)
+<pre class="src src-python" id="orgsrcblock47">help(Data.plot)
 </pre>
 </div>
 
@@ -2338,7 +2274,7 @@ Making a plot is rather easy (result not shown):
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="MultiChannelData-plot-example">Data.plot()
+<pre class="src src-python" id="orgsrcblock48">Data.plot()
 </pre>
 </div>
 
@@ -2348,7 +2284,7 @@ Making a plot showing the first channel only is done with (results not shown):
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="MultiChannelData-subset-and-plot-example">Data[0,:].plot()
+<pre class="src src-python" id="orgsrcblock49">Data[0,:].plot()
 </pre>
 </div>
 
@@ -2358,7 +2294,7 @@ And making a plot with the second and third channels using their names is done w
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="MultiChannelData-subset-and-plot-example2">Data[['ch11','ch13']].plot()
+<pre class="src src-python" id="orgsrcblock50">Data[['ch11','ch13']].plot()
 </pre>
 </div>
 
@@ -2368,7 +2304,7 @@ and the following two syntaxes work just as well:
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="MultiChannelData-subset-and-plot-example3">Data[['ch11','ch13'],].plot()
+<pre class="src src-python" id="orgsrcblock51">Data[['ch11','ch13'],].plot()
 Data[['ch11','ch13'],:].plot()
 </pre>
 </div>
@@ -2379,7 +2315,7 @@ The median could be obtained with (result not shown):
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="MultiChannelData-median-example">Data.median
+<pre class="src src-python" id="orgsrcblock52">Data.median
 </pre>
 </div>
 
@@ -2389,7 +2325,7 @@ And the MAD with (result not shown):
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="MultiChannelData-MAD-example">Data.mad
+<pre class="src src-python" id="orgsrcblock53">Data.mad
 </pre>
 </div>
 
@@ -2397,14 +2333,10 @@ And the MAD with (result not shown):
 A graph showing for a normalized version of the first recording site:
 </p>
 <ul class="org-ul">
-<li>the raw data (black),
-</li>
-<li>the first derivative (red),
-</li>
-<li>the box-filtered version of the raw data with a filter length of 3 points (blue),
-</li>
-<li>a rectified version of the latter setting everything above 3 to 0 (orange),
-</li>
+<li>the raw data (black),</li>
+<li>the first derivative (red),</li>
+<li>the box-filtered version of the raw data with a filter length of 3 points (blue),</li>
+<li>a rectified version of the latter setting everything above 3 to 0 (orange),</li>
 </ul>
 <p>
 is obtained with:
@@ -2412,7 +2344,7 @@ is obtained with:
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="MultiChannelData-subset-and-plot-example2">Data[0,Data.time2sample(4.28):Data.time2sample(4.3)].normalize.plot(color='black',linewidth=2)
+<pre class="src src-python" id="orgsrcblock54">Data[0,Data.time2sample(4.28):Data.time2sample(4.3)].normalize.plot(color='black',linewidth=2)
 Data[0,Data.time2sample(4.28):Data.time2sample(4.3)].normalize.derivative.plot(color='red',linewidth=2)
 Data[0,Data.time2sample(4.28):Data.time2sample(4.3)].normalize.box_filter(3).plot(color='blue',linewidth=2)
 Data[0,Data.time2sample(4.28):Data.time2sample(4.3)].normalize.box_filter(3).rectify(-3).plot(color='orange',linewidth=1)
@@ -2423,7 +2355,7 @@ plt.grid()
 </div>
 
 
-<div id="fig:MultiChannelData-subset-and-plot-example2-fig" class="figure">
+<div id="orgparagraph19" class="figure">
 <p><img src="img/MultiChannelData-subset-and-plot-example2.png" alt="MultiChannelData-subset-and-plot-example2.png" />
 </p>
 <p><span class="figure-number">Figure 20:</span> Example of use of <code>subsetting</code> / <code>time2sample</code> / <code>normalize</code> / <code>derivative</code> / <code>box_filter</code> / <code>rectify</code> methods for MultiChannelData objects.</p>
@@ -2432,34 +2364,26 @@ plt.grid()
 </div>
 </div>
 
-<div id="outline-container-sec-5-2" class="outline-3">
-<h3 id="sec-5-2"><span class="section-number-3">5.2</span> DetectedSpikes Class</h3>
+<div id="outline-container-orgheadline40" class="outline-3">
+<h3 id="orgheadline40"><span class="section-number-3">5.2</span> DetectedSpikes Class</h3>
 <div class="outline-text-3" id="text-5-2">
 <p>
 Instances of <code>class</code> <code>DetectedSpikes</code> will store the spikes (local maxima or minima) detection results. They are essentially vectors of sampling points with the following attributes:
 </p>
 <ul class="org-ul">
-<li><code>spike_positions</code>: a vector containing the positions (in sampling points) of the detected spikes.
-</li>
-<li><code>threshold</code>: the detection threshold used as a multiple of the MAD on each site. If positive, respectively negative, peaks, respectively valleys are detected.
-</li>
-<li><code>filter_length</code>: an odd positive integer, the length of the box filter applied to the data prior to extrema detection.
-</li>
-<li><code>minimal_dist</code>: a positive integer, the minimal distance between two successive peaks. When to peak are found within this minimal distance, the first is kept (superposed events are resolved as such subsequently).
-</li>
-<li><code>not_zero</code>: a positive float, the smallest value above which the absolute value of the derivative is considered not null (a "technical" parameter used to cope with precision loss during numerical computation).  
-</li>
+<li><code>spike_positions</code>: a vector containing the positions (in sampling points) of the detected spikes.</li>
+<li><code>threshold</code>: the detection threshold used as a multiple of the MAD on each site. If positive, respectively negative, peaks, respectively valleys are detected.</li>
+<li><code>filter_length</code>: an odd positive integer, the length of the box filter applied to the data prior to extrema detection.</li>
+<li><code>minimal_dist</code>: a positive integer, the minimal distance between two successive peaks. When to peak are found within this minimal distance, the first is kept (superposed events are resolved as such subsequently).</li>
+<li><code>not_zero</code>: a positive float, the smallest value above which the absolute value of the derivative is considered not null (a "technical" parameter used to cope with precision loss during numerical computation).</li>
 </ul>
 <p>
 The following methods are available:
 </p>
 <ul class="org-ul">
-<li><code>plot</code>: generates a graph of the raw data with the detected spikes superposed (appearing as red disks).
-</li>
-<li><code>mk_cuts</code>: generates a matrix or a dictionary containing the cuts, that is portions of the raw data with the spike located at a given position within the cut.
-</li>
-<li><code>mk_in_between_cuts</code>: generates a matrix or a dictionary containing cuts made "in between" spikes, that is portions of the raw data with no detected spike.
-</li>
+<li><code>plot</code>: generates a graph of the raw data with the detected spikes superposed (appearing as red disks).</li>
+<li><code>mk_cuts</code>: generates a matrix or a dictionary containing the cuts, that is portions of the raw data with the spike located at a given position within the cut.</li>
+<li><code>mk_in_between_cuts</code>: generates a matrix or a dictionary containing cuts made "in between" spikes, that is portions of the raw data with no detected spike.</li>
 </ul>
 <p>
 A length (<code>len</code>) special method is defined, a <code>print</code> special method is defined returning a short written summary of the instance content and subsetting can be performed on the object like on a "classical" vector.   
@@ -2467,7 +2391,7 @@ A length (<code>len</code>) special method is defined, a <code>print</code> spec
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="DetectedSpikes-Class-definition">class DetectedSpikes:
+<pre class="src src-python" id="orgsrcblock55">class DetectedSpikes:
     """Detected spikes."""
     def __init__(self,MCD_instance,channels4detection=None,threshold=4,filter_length=3,minimal_dist=15,not_zero=1e-3,spike_positions=None):
         """Create a new DetectedSpikes instance.
@@ -2528,7 +2452,7 @@ A length (<code>len</code>) special method is defined, a <code>print</code> spec
         return "An instance of DetectedSpikes.\n" \
             + "  Spikes were detected on " + str(len(channel_names)) + " channels simultaneously " \
             + str(channel_names) + ".\n" \
-            + "  A boxe filter with length " + str(self.filter_length) + " was used.\n" \
+            + "  A box filter with length " + str(self.filter_length) + " was used.\n" \
             + "  The detection threshold (multiple of the MAD) was set at " + str(self.threshold) + ".\n" \
             + "  " + str(len(self.spike_positions)) + " putative spikes were detected. The smallest inter spike interval is: " \
             + str(np.min(np.diff(self.spike_positions))) + ", and the largest is: " + str(np.max(np.diff(self.spike_positions))) \
@@ -2663,8 +2587,8 @@ A length (<code>len</code>) special method is defined, a <code>print</code> spec
 </div>
 </div>
 
-<div id="outline-container-sec-5-2-1" class="outline-4">
-<h4 id="sec-5-2-1"><span class="section-number-4">5.2.1</span> Example of use</h4>
+<div id="outline-container-orgheadline39" class="outline-4">
+<h4 id="orgheadline39"><span class="section-number-4">5.2.1</span> Example of use</h4>
 <div class="outline-text-4" id="text-5-2-1">
 <p>
 Spikes can be detected with:
@@ -2672,7 +2596,7 @@ Spikes can be detected with:
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="DetectedSpikes-instanciation-example">Spike = DetectedSpikes(Data,threshold=-3,filter_length=5)
+<pre class="src src-python" id="orgsrcblock56">Spike = DetectedSpikes(Data,threshold=-3,filter_length=5)
 </pre>
 </div>
 
@@ -2682,14 +2606,14 @@ A written summary is obtained with:
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="DetectedSpikes-print-example">print(Spike)
+<pre class="src src-python" id="orgsrcblock57">print(Spike)
 </pre>
 </div>
 
 <pre class="example">
 An instance of DetectedSpikes.
   Spikes were detected on 4 channels simultaneously ['ch09', 'ch11', 'ch13', 'ch16'].
-  A boxe filter with length 5 was used.
+  A box filter with length 5 was used.
   The detection threshold (multiple of the MAD) was set at -3.
   2242 putative spikes were detected. The smallest inter spike interval is: 16, and the largest is: 2145.
   The mean ISI is: 192 and the ISI SD is: 195.
@@ -2701,7 +2625,7 @@ We could quickly check the detection as we did before with (figure not shown):
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="DetectedSpikes-plot-example">Spike.plot()
+<pre class="src src-python" id="orgsrcblock58">Spike.plot()
 plt.xlim([0,0.2])
 </pre>
 </div>
@@ -2712,7 +2636,7 @@ We could look at the first 200 spikes with (figure not shown):
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="DetectedSpikes-plot-example2">Spike[:200].plot()
+<pre class="src src-python" id="orgsrcblock59">Spike[:200].plot()
 </pre>
 </div>
 
@@ -2723,7 +2647,7 @@ If we wanted to detect only from the first recording site we would use:
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="DetectedSpikes-instanciation-example2">Spike0 = DetectedSpikes(Data,0,threshold=-3,filter_length=5) 
+<pre class="src src-python" id="orgsrcblock60">Spike0 = DetectedSpikes(Data,0,threshold=-3,filter_length=5) 
 print(Spike0)
 </pre>
 </div>
@@ -2731,7 +2655,7 @@ print(Spike0)
 <pre class="example">
 An instance of DetectedSpikes.
   Spikes were detected on 1 channels simultaneously ['ch09'].
-  A boxe filter with length 5 was used.
+  A box filter with length 5 was used.
   The detection threshold (multiple of the MAD) was set at -3.
   1253 putative spikes were detected. The smallest inter spike interval is: 16, and the largest is: 2381.
   The mean ISI is: 343 and the ISI SD is: 343.
@@ -2744,16 +2668,38 @@ If we generate a plot <code>Spike0.plot()</code> at that stage, the four recordi
 </div>
 </div>
 
-<div id="outline-container-sec-5-3" class="outline-3">
-<h3 id="sec-5-3"><span class="section-number-3">5.3</span> Sample Class</h3>
+<div id="outline-container-orgheadline42" class="outline-3">
+<h3 id="orgheadline42"><span class="section-number-3">5.3</span> Sample Class</h3>
 <div class="outline-text-3" id="text-5-3">
 <p>
-<code>Class</code> <code>Sample</code> is designed to contain the events' sample, that is a collection of cuts around each detected spikes.
+<code>Class</code> <code>Sample</code> is designed to contain the events' sample, that is a collection of cuts around each detected spikes. Instances of this class have the following attributes:
+</p>
+<ul class="org-ul">
+<li><code>cuts</code>: a matrix with the cuts, each of the 'number of events' rows contains an event with the spike waveform on the different recording sites put one after the other.</li>
+<li><code>before</code>: a positive integer, the number of sampling points (within the cut) before the reference time.</li>
+<li><code>after</code>: a positive integer, the number of sampling points (within the cut) after the reference time&#x2014;the cut length equals before+after+1, stated differently it goes from -before to after with the reference time set at 0.</li>
+<li><code>shape</code>: a tuple (number of events, cut length x number of channels).</li>
+<li><code>mean</code>: a vector, the mean event.</li>
+<li><code>median</code>: a vector, the median event.</li>
+<li><code>mad</code>: a vector, the mad of the events' sample.</li>
+<li><code>std</code>: a vector, the standard deviation of the events' sample.</li>
+<li><code>var</code>: a vector, the variance of the events' sample.</li>
+<li><code>good_limits</code>: a dictionary with entries 'before' and 'after' giving the 'recommended' cut parameters based on the domain over which the events' sample MAD exceeds the full trace MAD.</li>
+</ul>
+<p>
+The following methods are available:
+</p>
+<ul class="org-ul">
+<li><code>plotM</code>: generates a plot with the events' sample median and the events' sample MAD to which the median has been added; this method is designed to guide a visual setting of the 'right' cut parameters 'before' and 'after'.</li>
+<li><code>plot</code>: generates a plot of the events with the events' sample median and MAD.</li>
+</ul>
+<p>
+A  <code>print</code> special method is defined returning a short written summary of the instance content and subsetting can be performed on the object like on a "classical" matrix.   
 </p>
 
 <div class="org-src-container">
 
-<pre class="src src-python" id="Sample-Class-definition">class Sample:
+<pre class="src src-python" id="orgsrcblock61">class Sample:
     """Events' sample: a collection of cuts around detected spikes."""
     def __init__(self, DS_instance, before=14, after=30, cuts=None):
         """Create a new Sample instance.
@@ -2786,7 +2732,7 @@ If we generate a plot <code>Spike0.plot()</code> at that stage, the four recordi
         """The shape."""
         return self._cuts.shape
     @property
-    def get_cuts(self):
+    def cuts(self):
         """Get the data."""
         return self._cuts
     @property
@@ -2814,6 +2760,52 @@ If we generate a plot <code>Spike0.plot()</code> at that stage, the four recordi
         """Sample's variance."""
         import numpy as np
         return np.var(self._cuts,axis=0)
+    @property
+    def good_limits(self):
+        """An array with the limits within which the MAD is above 'noise' level."""
+        import numpy as np
+        n_channels = self._DS._MCD.data.shape[0]
+        cut_length = self.before + self.after + 1
+        MAD = self.mad / np.repeat(self._DS._MCD.mad,cut_length) # Normalize MAD of each channel
+        MAD.shape = (n_channels,cut_length) # make it a matrix
+        MAD = MAD &gt;= 1.1 # get points with a MAD at least 10% greater than 'background noise'
+        ## Next find out the sample points where the above threshold is exceeded on at least
+        ## one channel
+        MAD = np.where(np.apply_along_axis(lambda x: np.any(x), 0 , MAD))[0]-self.before
+        MADd = np.array(list(np.diff(MAD))+[1]) ## We want contiguous sample points (so a diff of 1)
+        before = MAD[np.max(np.where(MADd[MAD&lt;0]&gt;1)[0])+1] if len(np.where(MADd[MAD&lt;0]&gt;1)[0]) &gt; 0 else MAD[0]
+        after = MAD[np.min(np.where(MADd[MAD&gt;=0]&gt;1)[0])+np.sum(MAD&lt;0)] if len(np.where(MADd[MAD&gt;=0]&gt;1)[0]) &gt; 0 else MAD[-1]
+        return {'before': np.abs(before),
+                'after': after}
+    def __str__(self):
+        """Controls the printed version of the instance."""
+        import numpy as np
+        return "An instance of Sample.\n" \
+            "  The instance contains: " + str(self.shape[0]) + " events.\n" \
+            "  The cuts are: " + str(self.before+self.after+1) + " sampling points long.\n" \
+            "  The reference time is located at position " + str(self.before) + " within each cut (indexes start at 0).\n" 
+    def plotM(self,v_spacing=10,
+              median_color='red',median_lw=2,
+              mad_color='blue',mad_lw=2):
+        """Plot sample median and MAD."""
+        import numpy as np
+        import matplotlib.pylab as plt
+        n_channels = self._DS._MCD.data.shape[0]
+        cut_length = self.before + self.after + 1
+        plt.plot(self.median, color=median_color, lw=median_lw)
+        MAD = self.mad + np.repeat(self._DS._MCD.median,cut_length)
+        plt.plot(MAD, color=mad_color, lw=mad_lw)
+        left_boundary = np.arange(cut_length,
+                                  self.shape[1],
+                                  cut_length*2)
+        for l in left_boundary:
+            plt.axvspan(l,l+cut_length-1,
+                        facecolor='grey',alpha=0.5,edgecolor='none')
+        plt.ylim([np.min(self.median),max(list(self.median)+list(MAD))])
+        for i in np.arange(0,cut_length*n_channels,cut_length): 
+            plt.axvline(x=i, color='black', lw=2)
+        for i in np.arange(0,cut_length*n_channels,v_spacing): 
+            plt.axvline(x=i, color='black')
     def plot(self,events_color='black',events_lw=0.1,
              show_median=True,median_color='red',
              median_lw=1,show_mad=True,
@@ -2847,7 +2839,8 @@ If we generate a plot <code>Spike0.plot()</code> at that stage, the four recordi
             plt.axvspan(l,l+cut_length-1,
                         facecolor='grey',alpha=0.5,edgecolor='none')
         plt.xticks([])
-        plt.ylim([np.min(self.get_cuts),np.max(self.get_cuts)])
+        plt.xlim([0,self.shape[1]])
+        plt.ylim([np.min(self.cuts),np.max(self.cuts)])
     def __getitem__(self,key):
         """Return a new subsetted instance."""
         cuts = self._cuts[key]
@@ -2855,11 +2848,108 @@ If we generate a plot <code>Spike0.plot()</code> at that stage, the four recordi
 </pre>
 </div>
 </div>
+
+<div id="outline-container-orgheadline41" class="outline-4">
+<h4 id="orgheadline41"><span class="section-number-4">5.3.1</span> Example of use</h4>
+<div class="outline-text-4" id="text-5-3-1">
+<p>
+We start with "long cuts" as we did previously to determine the "right" cut length:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="orgsrcblock62">Evts = Sample(Spike,before=49,after=50)
+print(Evts)
+</pre>
+</div>
+
+<pre class="example">
+An instance of Sample.
+  The instance contains: 2242 events.
+  The cuts are: 100 sampling points long.
+  The reference time is located at position 49 within each cut (indexes start at 0).
+</pre>
+
+<p>
+We can get a plot with the median and MAD with (result not shown):
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="orgsrcblock63">Evts.plotM()
+</pre>
+</div>
+
+<p>
+We can also call the <code>good_limits</code> method in order to have an automatic "good" value for the parameters 'before' and 'after':
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="orgsrcblock64">Evts.good_limits
+</pre>
+</div>
+
+<p>
+We see that we get here a slightly tighter cut than we did previously with our visual setting. We then redo our cuts with these parameters:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="orgsrcblock65">Evts = Sample(Spike,before=8,after=23)
+print(Evts)
+</pre>
+</div>
+
+<pre class="example">
+An instance of Sample.
+  The instance contains: 2242 events.
+  The cuts are: 32 sampling points long.
+  The reference time is located at position 8 within each cut (indexes start at 0).
+</pre>
+
+<p>
+The first 200 events can be visualized with:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="orgsrcblock66">Evts[:200,:].plot()
+</pre>
+</div>
+
+<div class="org-src-container">
+
+<pre class="src src-python">def good_evts_fct(samp, thr=3):
+    import numpy as np
+    from numpy import apply_along_axis as apply 
+    samp_med = samp.median
+    samp_mad = samp.mad
+    bellow = samp_med &lt; 0
+    samp_r = samp.cuts.copy()
+    for i in range(samp.shape[0]): samp_r[i,bellow] = 0
+    samp_med[bellow] = 0
+    res = apply(lambda x:
+                np.all(abs((x-samp_med)/samp_mad) &lt; thr),
+                1,samp_r)
+    return res
+</pre>
+</div>
+
+<div class="org-src-container">
+
+<pre class="src src-python">good_evts = good_evts_fct(Evts,8)
+Evts[-good_evts,:].plot()
+Evts[good_evts,:].plot()
+</pre>
+</div>
+</div>
+</div>
 </div>
 </div>
 
-<div id="outline-container-sec-6" class="outline-2">
-<h2 id="sec-6"><span class="section-number-2">6</span> Clean up, etc</h2>
+<div id="outline-container-orgheadline44" class="outline-2">
+<h2 id="orgheadline44"><span class="section-number-2">6</span> Clean up, etc</h2>
 <div class="outline-text-2" id="text-6">
 <div class="org-src-container">
 
@@ -2880,24 +2970,24 @@ db.close()
 <h2 class="footnotes">Footnotes: </h2>
 <div id="text-footnotes">
 
-<div class="footdef"><sup><a id="fn.1" name="fn.1" class="footnum" href="#fnr.1">1</a></sup> <p class="footpara">
+<div class="footdef"><sup><a id="fn.1" class="footnum" href="#fnr.1">1</a></sup> <div class="footpara"><p class="footpara">
 C. Pouzat, O. Mazor and G. Laurent (2002) <a href="http://xtof.perso.math.cnrs.fr/pdf/Pouzat+:2002.pdf">Using noise signature to optimize spike-sorting and to assess neuronal classification quality.</a> <i>Journal of Neuroscience Methods</i> <b>122</b>: 43-57.
-</p></div>
+</p></div></div>
 
-<div class="footdef"><sup><a id="fn.2" name="fn.2" class="footnum" href="#fnr.2">2</a></sup> <p class="footpara">
+<div class="footdef"><sup><a id="fn.2" class="footnum" href="#fnr.2">2</a></sup> <div class="footpara"><p class="footpara">
 Pouzat, Christophe. (2015). Peri-Stimulus Time Histograms Estimation Through Poisson Regression Without Generalized Linear Models. Zenodo. <a href="http://dx.doi.org/10.5281/zenodo.14660">10.5281/zenodo.14660</a>.
-</p></div>
+</p></div></div>
 
-<div class="footdef"><sup><a id="fn.3" name="fn.3" class="footnum" href="#fnr.3">3</a></sup> <p class="footpara">
+<div class="footdef"><sup><a id="fn.3" class="footnum" href="#fnr.3">3</a></sup> <div class="footpara"><p class="footpara">
 Christophe Pouzat. (2015). PouzatDetorakisEuroScipy2014: Complet avec référence. Zenodo. <a href="http://dx.doi.org/10.5281/zenodo.15070">10.5281/zenodo.15070</a>.
-</p></div>
+</p></div></div>
 
 
 </div>
 </div></div>
 <div id="postamble" class="status">
 <p class="author">Author: Christophe Pouzat</p>
-<p class="date">Created: 2015-08-04 mar. 15:24</p>
+<p class="date">Created: 2015-08-05 mer. 17:42</p>
 <p class="creator">Emacs 24.5.1 (Org mode 8.2.10)</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
