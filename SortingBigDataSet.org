@@ -2054,8 +2054,6 @@ help(Data.plot)
 : 
 : plot(linewidth=0.2, color='black', xlabel='Time (s)') method of __main__.MultiChannelData instance
 :     Plot the data.
-: 
-: 
 
 Making a plot is rather easy (result not shown):
 
@@ -2112,7 +2110,7 @@ Data.mad
 #+END_SRC
 
 #+RESULTS: MultiChannelData-MAD-example
-| 59.304 | 54.856 | 66.717 | 53.374 |
+| 59.304 | 54.8562 | 66.717 | 53.3736 |
 
 A graph showing for a normalized version of the first recording site:
 + the raw data (black),
@@ -2222,7 +2220,7 @@ class DetectedSpikes:
         return "An instance of DetectedSpikes.\n" \
             + "  Spikes were detected on " + str(len(channel_names)) + " channels simultaneously " \
             + str(channel_names) + ".\n" \
-            + "  A boxe filter with length " + str(self.filter_length) + " was used.\n" \
+            + "  A box filter with length " + str(self.filter_length) + " was used.\n" \
             + "  The detection threshold (multiple of the MAD) was set at " + str(self.threshold) + ".\n" \
             + "  " + str(len(self.spike_positions)) + " putative spikes were detected. The smallest inter spike interval is: " \
             + str(np.min(np.diff(self.spike_positions))) + ", and the largest is: " + str(np.max(np.diff(self.spike_positions))) \
@@ -2375,7 +2373,7 @@ print(Spike)
 #+RESULTS: DetectedSpikes-print-example
 : An instance of DetectedSpikes.
 :   Spikes were detected on 4 channels simultaneously ['ch09', 'ch11', 'ch13', 'ch16'].
-:   A boxe filter with length 5 was used.
+:   A box filter with length 5 was used.
 :   The detection threshold (multiple of the MAD) was set at -3.
 :   2242 putative spikes were detected. The smallest inter spike interval is: 16, and the largest is: 2145.
 :   The mean ISI is: 192 and the ISI SD is: 195.
@@ -2410,7 +2408,7 @@ print(Spike0)
 : 
 : An instance of DetectedSpikes.
 :   Spikes were detected on 1 channels simultaneously ['ch09'].
-:   A boxe filter with length 5 was used.
+:   A box filter with length 5 was used.
 :   The detection threshold (multiple of the MAD) was set at -3.
 :   1253 putative spikes were detected. The smallest inter spike interval is: 16, and the largest is: 2381.
 :   The mean ISI is: 343 and the ISI SD is: 343.
@@ -2484,6 +2482,43 @@ class Sample:
         """Sample's variance."""
         import numpy as np
         return np.var(self._cuts,axis=0)
+    @property
+    def good_limits(self):
+        """An array with the limits within which the MAD is above 'noise' level."""
+        import numpy as np
+        n_channels = self._DS._MCD.data.shape[0]
+        cut_length = self.before + self.after + 1
+        MAD = self.mad / np.repeat(self._DS._MCD.mad,cut_length) # Normalize MAD of each channel
+        MAD.shape = (n_channels,cut_length) # make it a matrix
+        MAD = MAD >= 1.1 # get points with a MAD at least 10% greater than 'background noise'
+        ## Next find out the sample points where the above threshold is exceeded on at least
+        ## one channel
+        MAD = np.where(np.apply_along_axis(lambda x: np.any(x), 0 , MAD))[0]-self.before
+        MADd = np.array(list(np.diff(MAD))+[1]) ## We want contiguous sample points (so a diff of 1)
+        return (MAD[np.max(np.where(MADd[MAD<0]>1)[0])+1],
+                MAD[np.min(np.where(MADd[MAD>=0]>1)[0])+np.sum(MAD<0)])
+    def plotM(self,v_spacing=10,
+              median_color='red',median_lw=2,
+              mad_color='blue',mad_lw=2):
+        """Plot sample median and MAD."""
+        import numpy as np
+        import matplotlib.pylab as plt
+        n_channels = self._DS._MCD.data.shape[0]
+        cut_length = self.before + self.after + 1
+        plt.plot(self.median, color=median_color, lw=median_lw)
+        MAD = self.mad + np.repeat(self._DS._MCD.median,cut_length)
+        plt.plot(MAD, color=mad_color, lw=mad_lw)
+        left_boundary = np.arange(cut_length,
+                                  self.shape[1],
+                                  cut_length*2)
+        for l in left_boundary:
+            plt.axvspan(l,l+cut_length-1,
+                        facecolor='grey',alpha=0.5,edgecolor='none')
+        plt.ylim([np.min(self.median),max(list(self.median)+list(MAD))])
+        for i in np.arange(0,cut_length*n_channels,cut_length): 
+            plt.axvline(x=i, color='black', lw=2)
+        for i in np.arange(0,cut_length*n_channels,v_spacing): 
+            plt.axvline(x=i, color='black')
     def plot(self,events_color='black',events_lw=0.1,
              show_median=True,median_color='red',
              median_lw=1,show_mad=True,
