@@ -2730,40 +2730,78 @@ class Sample4Clust(Sample):
             raise TypeError('lower_thr must be a negative number')
         good = Sample_instance.good_events(valley=valley,upper_thr=upper_thr,lower_thr=lower_thr)
         self._cuts = Sample_instance.cuts[good,:].copy()
+        self._Sample = Sample_instance
         self._DS = Sample_instance._DS[good]
         self.before = Sample_instance.before
         self.after = Sample_instance.after
+        self._valley = valley
+        self._upper_thr = upper_thr
+        self._lower_thr = lower_thr
         MED = np.repeat(Sample_instance._DS._MCD.median,Sample_instance.before+Sample_instance.after+1)
         MAD = np.repeat(Sample_instance._DS._MCD.mad,Sample_instance.before+Sample_instance.after+1)
         self._cuts -= MED.reshape((1,self._cuts.shape[1]))
         self._cuts /= MAD.reshape((1,self._cuts.shape[1]))
         varcovmat = np.cov(self._cuts.T)
         self.u, self.s, self.v = svd(varcovmat)
-    def plot(self,events_color='black',events_lw=0.1,
+        self.cluster = np.zeros(self._cuts.shape[0],dtype=np.int)
+    def copy(self):
+        """Return a new instance that is a copy of the present one."""
+        import numpy as np
+        new = Sample4Clust(Sample_instance=self._Sample,
+                           valley=self._valley,
+                           upper_thr=self._upper_thr,
+                           lower_thr=self._lower_thr)
+        new.cluster = self.cluster.copy()
+        return new
+    def __str__(self):
+        """Controls the printed version of the instance."""
+        import numpy as np
+        nb_total = self.shape[0]
+        blabla = "An instance of Sample4Clust.\n" \
+          "  The instance contains: " + str(nb_total) + " events.\n" \
+          "  The cuts are: " + str(self.before+self.after+1) + " sampling points long.\n" \
+          "  The reference time is located at position " + str(self.before) + " within each cut (indexes start at 0).\n"
+        if (np.max(self.cluster) > 0):
+            blabla += "  The number of events of each cluster (percent of events):\n"
+            blabla += "\n".join(["    Cluster " + str(i) + ": " + str(sum(self.cluster==i)) \
+                       + "  (" + str(round(100*sum(self.cluster==i)/nb_total,1)) + "%)" \
+                       for i in range(np.max(self.cluster)+1)])
+        return blabla  
+    def plot(self,cluster=None,events_color='black',events_lw=0.1,
              show_median=True,median_color='red',
              median_lw=1,show_mad=True,
              mad_color='blue',mad_lw=1):
         """Plot Sample4Clust.
-
+        
+        cluster      the cluster(s) to show, if none, all clusters are shown 
         events_color color used for the events
         events_lw    line width used for the events
         show_median  should the median be shown
         median_color color used for the median if shown
         median_lw    line width used for the median if shown
-        show_mad  should the mad be shown
-        mad_color color used for the mad if shown
-        mad_lw    line width used for the mad if shown
+        show_mad     should the mad be shown
+        mad_color    color used for the mad if shown
+        mad_lw       line width used for the mad if shown
         """
         import numpy as np
         import matplotlib.pylab as plt
+        if cluster is None:
+            good = slice(self.cuts.shape[0])
+        elif isinstance(cluster,int):
+            good = self.cluster == cluster
+        else:
+            good = [x in cluster for x in self.cluster]
         n_channels = self._DS._MCD._data.shape[0]
         cut_length = self.before + self.after + 1
-        for i in range(self.shape[0]):
-            plt.plot(self._cuts[i,:], color=events_color, lw=events_lw)
+        evts = self._cuts[good,:]
+        for i in range(evts.shape[0]):
+            plt.plot(evts[i,:], color=events_color, lw=events_lw)
+        MED = np.median(evts,axis=0)
+        MAD = np.median(np.abs(evts-MED.reshape(1,self.shape[1])),axis=0)*1.4826
         if show_median:
-            plt.plot(self.median, color=median_color, lw=median_lw)
+            plt.plot(MED, color=median_color, lw=median_lw)
         if show_mad:
-            plt.plot(self.mad, color=mad_color, lw=mad_lw)
+            plt.plot(MAD, color=mad_color, lw=mad_lw)
         left_boundary = np.arange(cut_length,
                                   self.shape[1],
                                   cut_length*2)
@@ -2790,8 +2828,165 @@ class Sample4Clust(Sample):
         for l in left_boundary:
             plt.axvspan(l,l+cut_length-1,
                         facecolor='grey',alpha=0.5,edgecolor='none')
+    def project(self,components=slice(4)):
+        """Project events onto principal components subspace specified by components."""
+        import numpy as np
+        return np.dot(self.cuts,self.u[:,components])
+    def csv(self,filename,components=slice(4),include_cluster=False):
+        """Write projected events into file in csv format optionnaly including cluster membership.
+
+        filename         the name of the file into which data will be stored
+        components       the principle components onto which to project
+        include_cluster  should the cluster attribute be included?
+        """
+        import csv
+        import numpy as np
+        g = open(filename,'w')
+        w = csv.writer(g)
+        if include_cluster:
+            w.writerows(np.concatenate((self.project(components),
+                                        np.array([self.cluster]).T),
+                                       axis=1))
+        else:
+            w.writerows(self.project(components))
+        g.close()
+    @property
+    def _order_clusters(self):
+        """Order clusters acording to the L1 norm of their median."""
+        import numpy as np
+        from numpy import apply_along_axis as apply
+        nb_clusters = np.max(self.cluster)+1
+        cluster_median = list([(i,
+                                apply(np.median,0,
+                                      self.cuts[self.cluster == i,:]))
+                               for i in range(nb_clusters)
+                               if sum(self.cluster == i) > 0])
+        cluster_size = list([np.sum(np.abs(x[1])) for x in cluster_median])
+        new_order = list(reversed(np.argsort(cluster_size)))
+        new_order_reverse = sorted(range(len(new_order)), key=new_order.__getitem__)
+        self.cluster = np.array([new_order_reverse[i] for i in self.cluster],dtype=np.int)
+    def _do_kmeans(self,proj,n,init='k-means++', n_init=100, max_iter=100):
+        """Do kmeans clustering of proj with n clusters."""
+        import numpy as np
+        from sklearn.cluster import KMeans
+        km = KMeans(n_clusters=n,init=init, max_iter=max_iter,n_init=n_init)
+        km.fit(proj)
+        return km.fit_predict(proj)
+    def _do_em4gmm(self,proj,n,n_init=20,covariance_type='full'):
+        """Do GMM with EM clustering of proj with n clusters."""
+        import numpy as np
+        from sklearn import mixture
+        gogo = mixture.GMM(n_components=n,covariance_type=covariance_type,n_init=n_init)
+        gogo.fit(proj)
+        return gogo.predict(proj)
+    def find_clusters(self,nb_clusters,method='kmeans',components=slice(4),n_init=100):
+        """Unsupervised clustering with nb_clusters on a projected version of the events.
+
+        Parameters
+        ----------
+        nb_clusters  an integer > 1, the number of clusters
+        method       a string 'kmeans' or 'EM4GMM' (E-M algorithm for Gaussian mixture model),
+                     the clustering procedure to use.
+        components   the principle components onto which to project
+        n_init       number of different initial partitions used to run the clustering algorithms
+        
+        Side effect
+        -------
+        Attribute cluster is updated.
+        """
+        import numpy as np
+        if not isinstance(nb_clusters,int) or nb_clusters <= 1:
+            raise TypeError('nb_clusters must be an integer > 1.')
+        if not method in ['kmeans','EM4GMM']:
+            raise ValueError('method must be either \'kmeans\' for kmeans or\n\'EM4GMM\' for E-M based clustering with a Gaussian mixture.')
+        proj = self.project(components)
+        if method == 'kmeans':
+            self.cluster=self._do_kmeans(proj,nb_clusters,init='k-means++', n_init=n_init, max_iter=100)
+        else:
+            self.cluster = self._do_em4gmm(proj,nb_clusters,n_init=n_init,covariance_type='full')
+        self._order_clusters
+        print("Number of events of each cluster (percent of events):")
+        nb_total = self._cuts.shape[0]
+        for i in range(nb_clusters):
+            nb_evts = sum(self.cluster==i)
+            pct_evts = round(100*nb_evts/nb_total,1)
+            if i < 10:
+                print("Cluster  " + str(i) + ": " + str(nb_evts) + "  (" + str(pct_evts) + "%)")
+            else:
+                print("Cluster " + str(i) + ": " + str(nb_evts) + "  (" + str(pct_evts) + "%)")
+        print("Total number of events: " + str(nb_total))
+    def split_cluster(self,cluster2split=0,split_into=2,method='kmeans',components=slice(4),n_init=100):
+        """Unsupervised clustering with split_into on a projected version of the events belonging to cluster cluster2split.
+
+        Parameters
+        ----------
+        cluster2split a positive integer, the cluster to split
+        split_into    an integer > 1, the number of clusters to split into
+        method        a string 'kmeans' or 'EM4GMM' (E-M algorithm for Gaussian mixture model),
+                      the clustering procedure to use.
+        components    the principle components onto which to project
+        n_init        number of different initial partitions used to run the clustering algorithms
+        
+        Side effect
+        -------
+        Attribute cluster is updated.
+        """
+        import numpy as np
+        if not isinstance(cluster2split,int) or not cluster2split in range(max(self.cluster)+1):
+            raise ValueError('cluster2split must be an integer between 0 and ' + str(max(self.cluster)))
+        if not isinstance(split_into,int) or split_into <= 1:
+            raise TypeError('split_into must be an integer > 1.')
+        if not method in ['kmeans','EM4GMM']:
+            raise ValueError('method must be either \'kmeans\' for kmeans or\n\'EM4GMM\' for E-M based clustering with a Gaussian mixture.')
+        proj = self.project(components)[self.cluster == cluster2split,:]
+        if method == 'kmeans':
+            subcluster = self._do_kmeans(proj,split_into,init='k-means++', n_init=n_init, max_iter=100)
+        else:
+            subcluster = self._do_em4gmm(proj,split_into,n_init)
+        print("Number of events of each sub-cluster (percent of events) of cluster " + str(cluster2split) +":")
+        nb_total = sum(self.cluster  == cluster2split)
+        for i in range(split_into):
+            nb_evts = sum(subcluster==i)
+            pct_evts = round(100*nb_evts/nb_total,1)
+            if i < 10:
+                print("Sub-cluster  " + str(i) + ": " + str(nb_evts) + "  (" + str(pct_evts) + "%)")
+            else:
+                print("Sub-cluster " + str(i) + ": " + str(nb_evts) + "  (" + str(pct_evts) + "%)")
+        print("Total number of events: " + str(nb_total))
+        gidx = np.arange(len(self.cluster))[self.cluster == cluster2split]
+        nb_total = np.max(self.cluster)
+        for i in range(1,split_into):
+            self.cluster[gidx[subcluster == i]] = nb_total+i 
+        self._order_clusters
         
 #+END_SRC
+
+#+BEGIN_SRC python :session *Python* :results output
+EvtsG = Sample4Clust(Evts,valley=True,upper_thr=10,lower_thr=-6)
+print(EvtsG)
+#+END_SRC
+
+#+RESULTS:
+: 
+: An instance of Sample4Clust.
+:   The instance contains: 1988 events.
+:   The cuts are: 32 sampling points long.
+:   The reference time is located at position 8 within each cut (indexes start at 0).
+
+#+BEGIN_SRC python :session *Python* :results output
+EvtsG.find_clusters(7)
+#+END_SRC
+
+#+RESULTS:
+: Number of events of each cluster (percent of events):
+: Cluster  0: 146  (7.3%)
+: Cluster  1: 117  (5.9%)
+: Cluster  2: 69  (3.5%)
+: Cluster  3: 468  (23.5%)
+: Cluster  4: 378  (19.0%)
+: Cluster  5: 431  (21.7%)
+: Cluster  6: 379  (19.1%)
+: Total number of events: 1988
 
 * Clean up, etc :export:
 
