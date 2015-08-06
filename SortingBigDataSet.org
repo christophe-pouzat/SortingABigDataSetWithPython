@@ -2427,6 +2427,7 @@ If we generate a plot =Spike0.plot()= at that stage, the four recording sites ar
 The following methods are available:
 + =plotM=: generates a plot with the events' sample median and the events' sample MAD to which the median has been added; this method is designed to guide a visual setting of the 'right' cut parameters 'before' and 'after'.
 + =plot=: generates a plot of the events with the events' sample median and MAD.
++ =good_events=: returns a Boolean vector whose elements are True for events 'close' enough to the median event and False otherwise. 
 A  =print= special method is defined returning a short written summary of the instance content and subsetting can be performed on the object like on a "classical" matrix.   
 
 #+NAME: Sample-Class-definition
@@ -2577,7 +2578,49 @@ class Sample:
         """Return a new subsetted instance."""
         cuts = self._cuts[key]
         return Sample(self._DS[key[0]],self.before,self.after,cuts)
-    
+    def good_events(self,valley=True,upper_thr=3,lower_thr=None):
+        """Are individual events 'close enough' to the median event?
+
+        Parameters
+        ----------
+        valley      a boolean, is the salient event a valley (True) or a peak (False)?
+        upper_thr   a positive number, by how many time the MAD is the event allow to
+                    deviate from the median in the positive direction?
+        lower_thr   a negative number, by how many time the MAD is the event allow to
+                    deviate from the median in the negative direction? If None (default)
+                    lower_thr is set to -upper_thr
+
+        Returns
+        -------
+        A Boolean vector whose elements are True if the event is 'good' and False otherwise.
+
+        Details
+        -------
+        Deviations are look for in the region where the median is positive when valley
+        is True and where it is negative otherwise.
+        """
+        import numpy as np
+        from numpy import apply_along_axis as apply
+        if not isinstance(upper_thr,(int,float)) or upper_thr <= 0:
+            raise TypeError('upper_thr must be a positive number')
+        if lower_thr is None:
+            lower_thr = -upper_thr
+        if not isinstance(lower_thr,(int,float)) or lower_thr >= 0:
+            raise TypeError('lower_thr must be a negative number')
+        samp_med = self.median
+        samp_mad = self.mad
+        if valley:
+            remove = samp_med < 0
+        else:
+            remove = samp_med > 0
+        samp_r = self.cuts.copy()
+        for i in range(self.shape[0]): samp_r[i,remove] = 0
+        samp_med[remove] = 0
+        res = apply(lambda x:
+                    np.all((lower_thr <(x-samp_med)/samp_mad)*\
+                           ((x-samp_med)/samp_mad < upper_thr)),
+                    1,samp_r)
+        return res
 #+END_SRC
 
 *** Example of use
@@ -2612,7 +2655,7 @@ Evts.good_limits
 #+END_SRC
 
 #+RESULTS: Sample-good_limits-example
-| after | : | 23 | before | : | 8 |
+| before | : | 8 | after | : | 23 |
 
 We see that we get here a slightly tighter cut than we did previously with our visual setting. We then redo our cuts with these parameters:
 
@@ -2636,26 +2679,118 @@ The first 200 events can be visualized with:
 Evts[:200,:].plot()
 #+END_SRC
 
-#+BEGIN_SRC python :session *Python*
-def good_evts_fct(samp, thr=3):
-    import numpy as np
-    from numpy import apply_along_axis as apply 
-    samp_med = samp.median
-    samp_mad = samp.mad
-    bellow = samp_med < 0
-    samp_r = samp.cuts.copy()
-    for i in range(samp.shape[0]): samp_r[i,bellow] = 0
-    samp_med[bellow] = 0
-    res = apply(lambda x:
-                np.all(abs((x-samp_med)/samp_mad) < thr),
-                1,samp_r)
-    return res
+The =good_events= method is slightly more sophisticated than our previous function doing the same job since it potentially differentiates between positive and negative deviations. We can see its effect on the following graph where the first 500 good events are shown on the top and all the bad ones are shown at the bottom. We are using the fact that the complementary of a =numpy Boolean vector= is obtained by taking its opposite.
+
+#+NAME: Sample-good_events-example
+#+BEGIN_SRC python :session *Python* :results silent
+plt.subplot(211)
+Evts[Evts.good_events(valley=True,upper_thr=10,lower_thr=-6),:][:500,:].plot()
+plt.subplot(212)
+Evts[-Evts.good_events(valley=True,upper_thr=10,lower_thr=-6),:].plot()
 #+END_SRC
 
-#+BEGIN_SRC python :session *Python*
-good_evts = good_evts_fct(Evts,8)
-Evts[-good_evts,:].plot()
-Evts[good_evts,:].plot()
+#+NAME: Sample-good_events-example-fig
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/Sample-good_events-example.png")
+plt.close()
+"img/Sample-good_events-example.png"
+#+END_SRC
+
+#+CAPTION: Example of use of =subsetting= and =good_events= methods for Sample objects.
+#+ATTR_LATEX: :width 1.0\textwidth
+#+NAME: fig:Sample-good_events-example
+#+RESULTS: Sample-good_events-example-fig
+[[file:img/Sample-good_events-example.png]]
+
+** Sample4Clust Class
+
+We define next a subclass of =Sample= that we call =Sample4Clust=. This class will contain a "clean" sub-sample of the events of the parent =Sample= instance. This clean sub-sample will moreover be normalized, that is, the median of each channel will be subtracted from the corresponding sample points of the events that will also be divided by the MAD of the channel.
+
+#+NAME: Sample4Clust-Class-definition
+#+BEGIN_SRC python :session *Python* :results silent
+class Sample4Clust(Sample):
+    """Selected and normalized events from a Sample instance."""
+    def __init__(self,Sample_instance,valley=True,upper_thr=3,lower_thr=None):
+        """Create a new Sample instance.
+
+        valley      a boolean, is the salient event a valley (True) or a peak (False)?
+        upper_thr   a positive number, by how many time the MAD is the event allow to
+                    deviate from the median in the positive direction?
+        lower_thr   a negative number, by how many time the MAD is the event allow to
+                    deviate from the median in the negative direction? If None (default)
+                    lower_thr is set to -upper_thr
+        """
+        import numpy as np
+        from numpy.linalg import svd
+        if not isinstance(upper_thr,(int,float)) or upper_thr <= 0:
+            raise TypeError('upper_thr must be a positive number')
+        if lower_thr is None:
+            lower_thr = -upper_thr
+        if not isinstance(lower_thr,(int,float)) or lower_thr >= 0:
+            raise TypeError('lower_thr must be a negative number')
+        good = Sample_instance.good_events(valley=valley,upper_thr=upper_thr,lower_thr=lower_thr)
+        self._cuts = Sample_instance.cuts[good,:].copy()
+        self._DS = Sample_instance._DS[good]
+        self.before = Sample_instance.before
+        self.after = Sample_instance.after
+        MED = np.repeat(Sample_instance._DS._MCD.median,Sample_instance.before+Sample_instance.after+1)
+        MAD = np.repeat(Sample_instance._DS._MCD.mad,Sample_instance.before+Sample_instance.after+1)
+        self._cuts -= MED.reshape((1,self._cuts.shape[1]))
+        self._cuts /= MAD.reshape((1,self._cuts.shape[1]))
+        varcovmat = np.cov(self._cuts.T)
+        self.u, self.s, self.v = svd(varcovmat)
+    def plot(self,events_color='black',events_lw=0.1,
+             show_median=True,median_color='red',
+             median_lw=1,show_mad=True,
+             mad_color='blue',mad_lw=1):
+        """Plot Sample4Clust.
+
+        events_color color used for the events
+        events_lw    line width used for the events
+        show_median  should the median be shown
+        median_color color used for the median if shown
+        median_lw    line width used for the median if shown
+        show_mad  should the mad be shown
+        mad_color color used for the mad if shown
+        mad_lw    line width used for the mad if shown
+        """
+        import numpy as np
+        import matplotlib.pylab as plt
+        n_channels = self._DS._MCD._data.shape[0]
+        cut_length = self.before + self.after + 1
+        for i in range(self.shape[0]):
+            plt.plot(self._cuts[i,:], color=events_color, lw=events_lw)
+        if show_median:
+            plt.plot(self.median, color=median_color, lw=median_lw)
+        if show_mad:
+            plt.plot(self.mad, color=mad_color, lw=mad_lw)
+        left_boundary = np.arange(cut_length,
+                                  self.shape[1],
+                                  cut_length*2)
+        for l in left_boundary:
+            plt.axvspan(l,l+cut_length-1,
+                        facecolor='grey',alpha=0.5,edgecolor='none')
+        plt.xticks([])
+        plt.xlim([0,self.shape[1]])
+        plt.ylim([np.min(self.cuts),np.max(self.cuts)])
+    def plotPCA(self,component=0,factor=5,lw=2):
+        """Plot Mean +/- factor x Principal Component."""
+        import numpy as np
+        import matplotlib.pylab as plt
+        n_channels = self._DS._MCD._data.shape[0]
+        cut_length = self.before + self.after + 1
+        plt.plot(self.mean,color='black',lw=lw)
+        PC = self.u[:,component]
+        plt.plot(self.mean + factor*PC, color='red',lw=lw)
+        plt.plot(self.mean - factor*PC, color='blue',lw=lw)
+        plt.title('PC' + str(component) + ': ' + str(round(self.s[component]/sum(self.s)*100)) +'%')
+        left_boundary = np.arange(cut_length,
+                                  self.shape[1],
+                                  cut_length*2)
+        for l in left_boundary:
+            plt.axvspan(l,l+cut_length-1,
+                        facecolor='grey',alpha=0.5,edgecolor='none')
+        
 #+END_SRC
 
 * Clean up, etc :export:

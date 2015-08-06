@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2015-08-05 mer. 17:42 -->
+<!-- 2015-08-06 jeu. 12:15 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="viewport" content="width=device-width, initial-scale=1" />
 <title>Sorting a Big Data Set With Python</title>
@@ -230,7 +230,7 @@ for the JavaScript code in this tag.
 <li><a href="#orgheadline35">4.9. Getting the spike trains</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline43">5. Defining classes and methods for a systematic analysis of the remaining of the experiment</a>
+<li><a href="#orgheadline44">5. Defining classes and methods for a systematic analysis of the remaining of the experiment</a>
 <ul>
 <li><a href="#orgheadline38">5.1. MultiChannelData Class</a>
 <ul>
@@ -247,9 +247,10 @@ for the JavaScript code in this tag.
 <li><a href="#orgheadline41">5.3.1. Example of use</a></li>
 </ul>
 </li>
+<li><a href="#orgheadline43">5.4. Sample4Clust Class</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline44">6. Clean up, etc</a></li>
+<li><a href="#orgheadline45">6. Clean up, etc</a></li>
 </ul>
 </div>
 </div>
@@ -1829,8 +1830,8 @@ Keep in mind that clusters 4 and 6 are very close to noise level and should not 
 </div>
 </div>
 
-<div id="outline-container-orgheadline43" class="outline-2">
-<h2 id="orgheadline43"><span class="section-number-2">5</span> Defining classes and methods for a systematic analysis of the remaining of the experiment</h2>
+<div id="outline-container-orgheadline44" class="outline-2">
+<h2 id="orgheadline44"><span class="section-number-2">5</span> Defining classes and methods for a systematic analysis of the remaining of the experiment</h2>
 <div class="outline-text-2" id="text-5">
 <p>
 At that stage we want to take the next epoch of 29 seconds of spontaneous activity and, using our "templates catalog", <code>centers</code>, recursively detect spikes, subtract the closest catalog member, until there is "nothing left". To track potential electrode drifts resulting in clusters waveform changes, we want, after the classification of each epoch, to recompute the median of each cluster as long as the latter as enough associated events or make a compromise between the former median and the new one when there aren't enough associated events. Do do all that, we don't want to type as many command lines as we just did; that's why we are going to introduce some classes and associated methods.
@@ -2692,6 +2693,7 @@ The following methods are available:
 <ul class="org-ul">
 <li><code>plotM</code>: generates a plot with the events' sample median and the events' sample MAD to which the median has been added; this method is designed to guide a visual setting of the 'right' cut parameters 'before' and 'after'.</li>
 <li><code>plot</code>: generates a plot of the events with the events' sample median and MAD.</li>
+<li><code>good_events</code>: returns a Boolean vector whose elements are True for events 'close' enough to the median event and False otherwise.</li>
 </ul>
 <p>
 A  <code>print</code> special method is defined returning a short written summary of the instance content and subsetting can be performed on the object like on a "classical" matrix.   
@@ -2845,6 +2847,49 @@ A  <code>print</code> special method is defined returning a short written summar
         """Return a new subsetted instance."""
         cuts = self._cuts[key]
         return Sample(self._DS[key[0]],self.before,self.after,cuts)
+    def good_events(self,valley=True,upper_thr=3,lower_thr=None):
+        """Are individual events 'close enough' to the median event?
+
+        Parameters
+        ----------
+        valley      a boolean, is the salient event a valley (True) or a peak (False)?
+        upper_thr   a positive number, by how many time the MAD is the event allow to
+                    deviate from the median in the positive direction?
+        lower_thr   a negative number, by how many time the MAD is the event allow to
+                    deviate from the median in the negative direction? If None (default)
+                    lower_thr is set to -upper_thr
+
+        Returns
+        -------
+        A Boolean vector whose elements are True if the event is 'good' and False otherwise.
+
+        Details
+        -------
+        Deviations are look for in the region where the median is positive when valley
+        is True and where it is negative otherwise.
+        """
+        import numpy as np
+        from numpy import apply_along_axis as apply
+        if not isinstance(upper_thr,(int,float)) or upper_thr &lt;= 0:
+            raise TypeError('upper_thr must be a positive number')
+        if lower_thr is None:
+            lower_thr = -upper_thr
+        if not isinstance(lower_thr,(int,float)) or lower_thr &gt;= 0:
+            raise TypeError('lower_thr must be a negative number')
+        samp_med = self.median
+        samp_mad = self.mad
+        if valley:
+            remove = samp_med &lt; 0
+        else:
+            remove = samp_med &gt; 0
+        samp_r = self.cuts.copy()
+        for i in range(self.shape[0]): samp_r[i,remove] = 0
+        samp_med[remove] = 0
+        res = apply(lambda x:
+                    np.all((lower_thr &lt;(x-samp_med)/samp_mad)*\
+                           ((x-samp_med)/samp_mad &lt; upper_thr)),
+                    1,samp_r)
+        return res
 </pre>
 </div>
 </div>
@@ -2918,38 +2963,128 @@ The first 200 events can be visualized with:
 </pre>
 </div>
 
-<div class="org-src-container">
-
-<pre class="src src-python">def good_evts_fct(samp, thr=3):
-    import numpy as np
-    from numpy import apply_along_axis as apply 
-    samp_med = samp.median
-    samp_mad = samp.mad
-    bellow = samp_med &lt; 0
-    samp_r = samp.cuts.copy()
-    for i in range(samp.shape[0]): samp_r[i,bellow] = 0
-    samp_med[bellow] = 0
-    res = apply(lambda x:
-                np.all(abs((x-samp_med)/samp_mad) &lt; thr),
-                1,samp_r)
-    return res
-</pre>
-</div>
+<p>
+The <code>good_events</code> method is slightly more sophisticated than our previous function doing the same job since it potentially differentiates between positive and negative deviations. We can see its effect on the following graph where the first 500 good events are shown on the top and all the bad ones are shown at the bottom. We are using the fact that the complementary of a <code>numpy Boolean vector</code> is obtained by taking its opposite.
+</p>
 
 <div class="org-src-container">
 
-<pre class="src src-python">good_evts = good_evts_fct(Evts,8)
-Evts[-good_evts,:].plot()
-Evts[good_evts,:].plot()
+<pre class="src src-python" id="orgsrcblock67">plt.subplot(211)
+Evts[Evts.good_events(valley=True,upper_thr=10,lower_thr=-6),:][:500,:].plot()
+plt.subplot(212)
+Evts[-Evts.good_events(valley=True,upper_thr=10,lower_thr=-6),:].plot()
 </pre>
 </div>
+
+
+<div id="orgparagraph20" class="figure">
+<p><img src="img/Sample-good_events-example.png" alt="Sample-good_events-example.png" />
+</p>
+<p><span class="figure-number">Figure 21:</span> Example of use of <code>subsetting</code> and <code>good_events</code> methods for Sample objects.</p>
 </div>
 </div>
 </div>
 </div>
 
-<div id="outline-container-orgheadline44" class="outline-2">
-<h2 id="orgheadline44"><span class="section-number-2">6</span> Clean up, etc</h2>
+<div id="outline-container-orgheadline43" class="outline-3">
+<h3 id="orgheadline43"><span class="section-number-3">5.4</span> Sample4Clust Class</h3>
+<div class="outline-text-3" id="text-5-4">
+<p>
+We define next a subclass of <code>Sample</code> that we call <code>Sample4Clust</code>. This class will contain a "clean" sub-sample of the events of the parent <code>Sample</code> instance. This clean sub-sample will moreover be normalized, that is, the median of each channel will be subtracted from the corresponding sample points of the events that will also be divided by the MAD of the channel.
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="orgsrcblock68">class Sample4Clust(Sample):
+    """Selected and normalized events from a Sample instance."""
+    def __init__(self,Sample_instance,valley=True,upper_thr=3,lower_thr=None):
+        """Create a new Sample instance.
+
+        valley      a boolean, is the salient event a valley (True) or a peak (False)?
+        upper_thr   a positive number, by how many time the MAD is the event allow to
+                    deviate from the median in the positive direction?
+        lower_thr   a negative number, by how many time the MAD is the event allow to
+                    deviate from the median in the negative direction? If None (default)
+                    lower_thr is set to -upper_thr
+        """
+        import numpy as np
+        from numpy.linalg import svd
+        if not isinstance(upper_thr,(int,float)) or upper_thr &lt;= 0:
+            raise TypeError('upper_thr must be a positive number')
+        if lower_thr is None:
+            lower_thr = -upper_thr
+        if not isinstance(lower_thr,(int,float)) or lower_thr &gt;= 0:
+            raise TypeError('lower_thr must be a negative number')
+        good = Sample_instance.good_events(valley=valley,upper_thr=upper_thr,lower_thr=lower_thr)
+        self._cuts = Sample_instance.cuts[good,:].copy()
+        self._DS = Sample_instance._DS[good]
+        self.before = Sample_instance.before
+        self.after = Sample_instance.after
+        MED = np.repeat(Sample_instance._DS._MCD.median,Sample_instance.before+Sample_instance.after+1)
+        MAD = np.repeat(Sample_instance._DS._MCD.mad,Sample_instance.before+Sample_instance.after+1)
+        self._cuts -= MED.reshape((1,self._cuts.shape[1]))
+        self._cuts /= MAD.reshape((1,self._cuts.shape[1]))
+        varcovmat = np.cov(self._cuts.T)
+        self.u, self.s, self.v = svd(varcovmat)
+    def plot(self,events_color='black',events_lw=0.1,
+             show_median=True,median_color='red',
+             median_lw=1,show_mad=True,
+             mad_color='blue',mad_lw=1):
+        """Plot Sample4Clust.
+
+        events_color color used for the events
+        events_lw    line width used for the events
+        show_median  should the median be shown
+        median_color color used for the median if shown
+        median_lw    line width used for the median if shown
+        show_mad  should the mad be shown
+        mad_color color used for the mad if shown
+        mad_lw    line width used for the mad if shown
+        """
+        import numpy as np
+        import matplotlib.pylab as plt
+        n_channels = self._DS._MCD._data.shape[0]
+        cut_length = self.before + self.after + 1
+        for i in range(self.shape[0]):
+            plt.plot(self._cuts[i,:], color=events_color, lw=events_lw)
+        if show_median:
+            plt.plot(self.median, color=median_color, lw=median_lw)
+        if show_mad:
+            plt.plot(self.mad, color=mad_color, lw=mad_lw)
+        left_boundary = np.arange(cut_length,
+                                  self.shape[1],
+                                  cut_length*2)
+        for l in left_boundary:
+            plt.axvspan(l,l+cut_length-1,
+                        facecolor='grey',alpha=0.5,edgecolor='none')
+        plt.xticks([])
+        plt.xlim([0,self.shape[1]])
+        plt.ylim([np.min(self.cuts),np.max(self.cuts)])
+    def plotPCA(self,component=0,factor=5,lw=2):
+        """Plot Mean +/- factor x Principal Component."""
+        import numpy as np
+        import matplotlib.pylab as plt
+        n_channels = self._DS._MCD._data.shape[0]
+        cut_length = self.before + self.after + 1
+        plt.plot(self.mean,color='black',lw=lw)
+        PC = self.u[:,component]
+        plt.plot(self.mean + factor*PC, color='red',lw=lw)
+        plt.plot(self.mean - factor*PC, color='blue',lw=lw)
+        plt.title('PC' + str(component) + ': ' + str(round(self.s[component]/sum(self.s)*100)) +'%')
+        left_boundary = np.arange(cut_length,
+                                  self.shape[1],
+                                  cut_length*2)
+        for l in left_boundary:
+            plt.axvspan(l,l+cut_length-1,
+                        facecolor='grey',alpha=0.5,edgecolor='none')
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgheadline45" class="outline-2">
+<h2 id="orgheadline45"><span class="section-number-2">6</span> Clean up, etc</h2>
 <div class="outline-text-2" id="text-6">
 <div class="org-src-container">
 
@@ -2987,7 +3122,7 @@ Christophe Pouzat. (2015). PouzatDetorakisEuroScipy2014: Complet avec référenc
 </div></div>
 <div id="postamble" class="status">
 <p class="author">Author: Christophe Pouzat</p>
-<p class="date">Created: 2015-08-05 mer. 17:42</p>
+<p class="date">Created: 2015-08-06 jeu. 12:15</p>
 <p class="creator">Emacs 24.5.1 (Org mode 8.2.10)</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
