@@ -2987,7 +2987,46 @@ class Sample4Clust(Sample):
         for i in range(1,split_into):
             self.cluster[gidx[subcluster == i]] = nb_total+i 
         self._order_clusters
-        
+    def catalogue(self,before=49,after=50):
+        """Create a dictionary of clusters' centers and of their first two derivatives.
+
+        Parameters
+        ----------
+        before  a postive integer, the number of point to keep before the reference time.
+        after   a postive integer, the number of point to keep after the reference time.
+
+        Returns
+        -------
+        A dictionary of dictionaries with one sub-dictionary per cluster, each of those
+        containing three vectors, named 'center' (median), 'centerD' (median of the first
+        derivative), and 'centerDD' (median of the second derivative) for each cluster,
+        values of parameters 'before' and 'after' are also stored as entries of the top
+        dictionary.
+        A elementary check that the centers came back to baseline on the edges of cuts is
+        also performed and its result is printed to the standard output.
+        """
+        ds = self._DS
+        cut_length = before+after+1
+        critical_points = sorted(list(range(0,self.n_channels*cut_length,cut_length))\
+                                 + list(range(cut_length-1,(self.n_channels+1)*cut_length-1,cut_length)))
+        target_median = np.repeat(self._DS._MCD.median,2)
+        dsD = DetectedSpikes(self._DS._MCD.derivative,spike_positions=self._DS.spike_positions)
+        dsDD = DetectedSpikes(self._DS._MCD.derivative.derivative,spike_positions=self._DS.spike_positions)
+        samp = Sample(self._DS, before=before,after=after)
+        sampD = Sample(dsD, before=before,after=after)
+        sampDD = Sample(dsDD, before=before,after=after)
+        result = {'before':before,'after':after}
+        for i in range(np.max(self.cluster)+1):
+            center = samp[self.cluster==i,:].median
+            error = samp[self.cluster==i,:].mad[critical_points]/np.sqrt(sum(self.cluster==i))
+            if np.all(np.abs(center[critical_points]-target_median)/error < 3):
+                print('Cluster ' + str(i) + ' center is back to baseline with the parameter used.')
+            else:
+                print('Cluster ' + str(i) + ' center is NOT back to baseline with the parameter used.')
+            centerD = sampD[self.cluster==i,:].median
+            centerDD = sampDD[self.cluster==i,:].median
+            result.update({'Cluster '+str(i):{'center':center,'centerD':centerD,'centerDD':centerDD}})
+        return result
 #+END_SRC
 
 *** Example of use
@@ -3044,12 +3083,12 @@ EvtsG.find_clusters(7)
 #+RESULTS: Sample4Clust-find_clusters-example
 : Number of events of each cluster (percent of events):
 : Cluster  0: 147  (7.4%)
-: Cluster  1: 118  (5.9%)
-: Cluster  2: 68  (3.4%)
-: Cluster  3: 461  (23.2%)
-: Cluster  4: 383  (19.3%)
-: Cluster  5: 436  (21.9%)
-: Cluster  6: 375  (18.9%)
+: Cluster  1: 117  (5.9%)
+: Cluster  2: 69  (3.5%)
+: Cluster  3: 459  (23.1%)
+: Cluster  4: 377  (19.0%)
+: Cluster  5: 433  (21.8%)
+: Cluster  6: 386  (19.4%)
 : Total number of events: 1988
 
 To build a plot with the events of the different clusters as we did before we call:
@@ -3150,6 +3189,40 @@ An instance of Sample4Clust.
 
 So we are back to where we started.
  
+We can then (if we are happy with the clustering) get the "waveform catalogue" needed for classification using method =catalogue=, first with the default parameters:
+
+#+NAME: Sample4Clust-catalogue-example1
+#+BEGIN_SRC python :session *Python* :results output :exports both
+center_catalogue = EvtsG.catalogue()
+#+END_SRC
+
+#+RESULTS: Sample4Clust-catalogue-example1
+: Cluster 0 center is NOT back to baseline with the parameter used.
+: Cluster 1 center is NOT back to baseline with the parameter used.
+: Cluster 2 center is back to baseline with the parameter used.
+: Cluster 3 center is back to baseline with the parameter used.
+: Cluster 4 center is back to baseline with the parameter used.
+: Cluster 5 center is back to baseline with the parameter used.
+: Cluster 6 center is back to baseline with the parameter used.
+
+We see that the first two clusters are not back to baseline so we take more points after the reference time with:
+
+#+NAME: Sample4Clust-catalogue-example2
+#+BEGIN_SRC python :session *Python* :results output :exports both
+center_catalogue = EvtsG.catalogue(after=70)
+#+END_SRC
+
+#+RESULTS: Sample4Clust-catalogue-example2
+: Cluster 0 center is back to baseline with the parameter used.
+: Cluster 1 center is back to baseline with the parameter used.
+: Cluster 2 center is back to baseline with the parameter used.
+: Cluster 3 center is back to baseline with the parameter used.
+: Cluster 4 center is back to baseline with the parameter used.
+: Cluster 5 center is back to baseline with the parameter used.
+: Cluster 6 center is back to baseline with the parameter used.
+
+Trying to play also with =before= (to make it smaller than the default, 49) or to reduce =after= leads to the initial situation (failure to reach baseline on the edges) so we keep it that way.
+
 * Clean up, etc :export:
 
 #+BEGIN_SRC python :session *Python*
