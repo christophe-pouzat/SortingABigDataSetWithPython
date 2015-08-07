@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2015-08-07 ven. 13:21 -->
+<!-- 2015-08-07 ven. 16:16 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="viewport" content="width=device-width, initial-scale=1" />
 <title>Sorting a Big Data Set With Python</title>
@@ -230,7 +230,7 @@ for the JavaScript code in this tag.
 <li><a href="#orgheadline35">4.9. Getting the spike trains</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline44">5. Defining classes and methods for a systematic analysis of the remaining of the experiment</a>
+<li><a href="#orgheadline45">5. Defining classes and methods for a systematic analysis of the remaining of the experiment</a>
 <ul>
 <li><a href="#orgheadline38">5.1. MultiChannelData Class</a>
 <ul>
@@ -247,10 +247,14 @@ for the JavaScript code in this tag.
 <li><a href="#orgheadline41">5.3.1. Example of use</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline43">5.4. Sample4Clust Class</a></li>
+<li><a href="#orgheadline44">5.4. Sample4Clust Class</a>
+<ul>
+<li><a href="#orgheadline43">5.4.1. Example of use</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline45">6. Clean up, etc</a></li>
+</ul>
+</li>
+<li><a href="#orgheadline46">6. Clean up, etc</a></li>
 </ul>
 </div>
 </div>
@@ -1830,8 +1834,8 @@ Keep in mind that clusters 4 and 6 are very close to noise level and should not 
 </div>
 </div>
 
-<div id="outline-container-orgheadline44" class="outline-2">
-<h2 id="orgheadline44"><span class="section-number-2">5</span> Defining classes and methods for a systematic analysis of the remaining of the experiment</h2>
+<div id="outline-container-orgheadline45" class="outline-2">
+<h2 id="orgheadline45"><span class="section-number-2">5</span> Defining classes and methods for a systematic analysis of the remaining of the experiment</h2>
 <div class="outline-text-2" id="text-5">
 <p>
 At that stage we want to take the next epoch of 29 seconds of spontaneous activity and, using our "templates catalog", <code>centers</code>, recursively detect spikes, subtract the closest catalog member, until there is "nothing left". To track potential electrode drifts resulting in clusters waveform changes, we want, after the classification of each epoch, to recompute the median of each cluster as long as the latter as enough associated events or make a compromise between the former median and the new one when there aren't enough associated events. Do do all that, we don't want to type as many command lines as we just did; that's why we are going to introduce some classes and associated methods.
@@ -2976,6 +2980,34 @@ We can also call the <code>good_limits</code> method in order to have an automat
 </pre>
 </div>
 
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-right" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-right" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">before</td>
+<td class="org-left">:</td>
+<td class="org-right">8</td>
+<td class="org-left">after</td>
+<td class="org-left">:</td>
+<td class="org-right">23</td>
+</tr>
+</tbody>
+</table>
+
 <p>
 We see that we get here a slightly tighter cut than we did previously with our visual setting. We then redo our cuts with these parameters:
 </p>
@@ -3027,12 +3059,27 @@ Evts[-Evts.good_events(valley=True,upper_thr=10,lower_thr=-6),:].plot()
 </div>
 </div>
 
-<div id="outline-container-orgheadline43" class="outline-3">
-<h3 id="orgheadline43"><span class="section-number-3">5.4</span> Sample4Clust Class</h3>
+<div id="outline-container-orgheadline44" class="outline-3">
+<h3 id="orgheadline44"><span class="section-number-3">5.4</span> Sample4Clust Class</h3>
 <div class="outline-text-3" id="text-5-4">
 <p>
-We define next a subclass of <code>Sample</code> that we call <code>Sample4Clust</code>. This class will contain a "clean" sub-sample of the events of the parent <code>Sample</code> instance. This clean sub-sample will moreover be normalized, that is, the median of each channel will be subtracted from the corresponding sample points of the events that will also be divided by the MAD of the channel.
+We define next a subclass of <code>Sample</code> that we call <code>Sample4Clust</code>. This class will contain a "clean" sub-sample of the events of the parent <code>Sample</code> instance. This clean sub-sample is obtained by calling method <code>good_events</code> of <code>Sample</code> instances; it is moreover normalized, that is, the median of each channel will be subtracted from the corresponding sample points of the events that will also be divided by the MAD of the channel. In addition to the attributes and methods of the Sample instances, instances of <code>Sample4Clust</code> have:
 </p>
+<ul class="org-ul">
+<li><code>u</code>, <code>s</code> and <code>v</code>: two unitary matrices (<code>u</code> and <code>v</code>) and a vector (<code>s</code>) returned by <a href="http://docs.scipy.org/doc/numpy/reference/generated/numpy.linalg.svd.html#numpy.linalg.svd">svd</a>, the <code>numpy.linalg</code> function performing singular value decomposition.</li>
+<li><code>cluster</code>: a vector of integers containing the label / cluster of origin of each element (row) of <code>cuts</code> attribute matrix; this vector is initialized at 0.</li>
+</ul>
+<p>
+The following methods are defined:
+</p>
+<ul class="org-ul">
+<li><code>plotPCA</code>: plots the mean event together with the mean event plus or minus a number multiplying a selected principal component; this is usual to grab what the different principal components are describing.</li>
+<li><code>project</code>: projects the events onto the principal components subspace specified by a user choice and return a matrix.</li>
+<li><code>csv</code>: writes the matrix obtained with method <code>project</code> to a file in <code>csv</code> format; the content of attribute <code>cluster</code> can be added as a column of this matrix; this file is suitable for visualization with <a href="http://www.ggobi.org/">GGobi</a>.</li>
+<li><code>find_clusters</code>: does unsupervised clustering with the kmeans or with a Gaussian mixture model fitted with the EM algorithm; the number of clusters is set by the user; attribute <code>cluster</code> is updated as a result and a short description of the result is printed to the standard output.</li>
+<li><code>merge_clusters</code>: merges two or more clusters specified by the user; attribute <code>cluster</code> is updated as a result.</li>
+<li><code>split_cluster</code>: splits a user specified cluster in a user specified number of clusters using the same algorithms as method <code>find_clusters</code>.</li>
+</ul>
 
 <div class="org-src-container">
 
@@ -3206,7 +3253,7 @@ We define next a subclass of <code>Sample</code> that we call <code>Sample4Clust
             else:
                 print("Cluster " + str(i) + ": " + str(nb_evts) + "  (" + str(pct_evts) + "%)")
         print("Total number of events: " + str(nb_total))
-    def merge_cluster(self,cluster2merge):
+    def merge_clusters(self,cluster2merge):
         """Merge clusters whose numbers are in list cluster2merge."""
         import numpy as np
         if not isinstance(cluster2merge,list):
@@ -3265,25 +3312,215 @@ We define next a subclass of <code>Sample</code> that we call <code>Sample4Clust
         self._order_clusters
 </pre>
 </div>
+</div>
+
+<div id="outline-container-orgheadline43" class="outline-4">
+<h4 id="orgheadline43"><span class="section-number-4">5.4.1</span> Example of use</h4>
+<div class="outline-text-4" id="text-5-4-1">
+<p>
+We get a 'clean and normalized' version of our previous <code>Evts</code> with:
+</p>
 
 <div class="org-src-container">
 
-<pre class="src src-python">EvtsG = Sample4Clust(Evts,valley=True,upper_thr=10,lower_thr=-6)
+<pre class="src src-python" id="orgsrcblock70">EvtsG = Sample4Clust(Evts,valley=True,upper_thr=10,lower_thr=-6)
 print(EvtsG)
 </pre>
 </div>
 
+<pre class="example">
+An instance of Sample4Clust.
+  The instance contains: 1988 events.
+  The cuts are: 32 sampling points long.
+  The reference time is located at position 8 within each cut (indexes start at 0).
+</pre>
+
+<p>
+We can then make a figure displaying the first 4 principal components as we did before with:
+</p>
+
 <div class="org-src-container">
 
-<pre class="src src-python">EvtsG.find_clusters(7)
+<pre class="src src-python" id="orgsrcblock71">for i in range(4):
+    plt.subplot(2,2,i+1)
+    EvtsG.plotPCA(i)
 </pre>
+</div>
+
+<p>
+To construct a matrix of scatter plots with the events projected on the first principal components we use:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="orgsrcblock72">from pandas.tools.plotting import scatter_matrix
+import pandas as pd
+df = pd.DataFrame(EvtsG.project([0,1,2,3]))
+scatter_matrix(df,alpha=0.2,s=4,c='k',figsize=(6,6),
+               diagonal='kde',marker=".")
+</pre>
+</div>
+
+<p>
+We can then write the events projected onto the sub-space defined by the first 4 principal components with:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="orgsrcblock73">EvtsG.csv('EvtsG.csv',components=range(4))
+</pre>
+</div>
+
+<p>
+A clustering with 7 clusters using the kmeans algorithm (the default) and the events projected onto the first 4 PCs (the default) is done with:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="orgsrcblock74">EvtsG.find_clusters(7)
+</pre>
+</div>
+
+<pre class="example">
+Number of events of each cluster (percent of events):
+Cluster  0: 147  (7.4%)
+Cluster  1: 118  (5.9%)
+Cluster  2: 68  (3.4%)
+Cluster  3: 461  (23.2%)
+Cluster  4: 383  (19.3%)
+Cluster  5: 436  (21.9%)
+Cluster  6: 375  (18.9%)
+Total number of events: 1988
+</pre>
+
+<p>
+To build a plot with the events of the different clusters as we did before we call:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="orgsrcblock75">for i in range(4):
+    plt.subplot(4,1,i+1)
+    EvtsG[EvtsG.cluster==i].plot()
+    plt.ylim([-20,15])
+</pre>
+</div>
+
+<p>
+The last three clusters are displayed with:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="orgsrcblock76">for i in range(3):
+    plt.subplot(3,1,i+1)
+    EvtsG[EvtsG.cluster==i+4].plot()
+    plt.ylim([-10,5])
+</pre>
+</div>
+
+<p>
+We could draw on the same graph all the events of cluster 0 (in black) and all the events of cluster 2 (in orange) with:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="orgsrcblock77">EvtsG[EvtsG.cluster==0].plot(show_median=False,show_mad=False)
+EvtsG[EvtsG.cluster==2].plot(events_color='orange',show_median=False,show_mad=False)
+plt.ylim([-10,10])
+</pre>
+</div>
+
+<p>
+We could merge these two clusters with:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="orgsrcblock78">EvtsG.merge_clusters([0,2])
+</pre>
+</div>
+
+<p>
+To see in what cluster they ended up we call the <code>print</code> special method and compare its output with our initial call to the <code>find_clusters</code> method:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="orgsrcblock79">print(EvtsG)
+</pre>
+</div>
+
+<pre class="example">
+An instance of Sample4Clust.
+  The instance contains: 1988 events.
+  The cuts are: 32 sampling points long.
+  The reference time is located at position 8 within each cut (indexes start at 0).
+  The number of events of each cluster (percent of events):
+    Cluster 0: 215  (10.8%)
+    Cluster 1: 118  (5.9%)
+    Cluster 2: 461  (23.2%)
+    Cluster 3: 383  (19.3%)
+    Cluster 4: 436  (21.9%)
+    Cluster 5: 375  (18.9%)
+</pre>
+
+<p>
+We see that the new cluster 0 has the same number of events than the sum of the events of two previous clusters we just merged (0 and 2).
+</p>
+
+<p>
+We can split this new cluster 0 into 2 clusters using the kmeans with:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="orgsrcblock80">EvtsG.split_cluster(0,2)
+</pre>
+</div>
+
+<pre class="example">
+Number of events of each sub-cluster (percent of events) of cluster 0:
+Sub-cluster  0: 68  (31.6%)
+Sub-cluster  1: 147  (68.4%)
+Total number of events: 215
+</pre>
+
+<p>
+And the <code>print</code> special method gives:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python" id="orgsrcblock81">print(EvtsG)
+</pre>
+</div>
+
+<pre class="example">
+An instance of Sample4Clust.
+  The instance contains: 1988 events.
+  The cuts are: 32 sampling points long.
+  The reference time is located at position 8 within each cut (indexes start at 0).
+  The number of events of each cluster (percent of events):
+    Cluster 0: 147  (7.4%)
+    Cluster 1: 118  (5.9%)
+    Cluster 2: 68  (3.4%)
+    Cluster 3: 461  (23.2%)
+    Cluster 4: 383  (19.3%)
+    Cluster 5: 436  (21.9%)
+    Cluster 6: 375  (18.9%)
+</pre>
+
+<p>
+So we are back to where we started.
+</p>
 </div>
 </div>
 </div>
 </div>
 
-<div id="outline-container-orgheadline45" class="outline-2">
-<h2 id="orgheadline45"><span class="section-number-2">6</span> Clean up, etc</h2>
+<div id="outline-container-orgheadline46" class="outline-2">
+<h2 id="orgheadline46"><span class="section-number-2">6</span> Clean up, etc</h2>
 <div class="outline-text-2" id="text-6">
 <div class="org-src-container">
 
@@ -3321,7 +3558,7 @@ Christophe Pouzat. (2015). PouzatDetorakisEuroScipy2014: Complet avec référenc
 </div></div>
 <div id="postamble" class="status">
 <p class="author">Author: Christophe Pouzat</p>
-<p class="date">Created: 2015-08-07 ven. 13:21</p>
+<p class="date">Created: 2015-08-07 ven. 16:16</p>
 <p class="creator">Emacs 24.5.1 (Org mode 8.2.10)</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>

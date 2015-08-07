@@ -2687,7 +2687,7 @@ Evts.plotM()
 We can also call the =good_limits= method in order to have an automatic "good" value for the parameters 'before' and 'after':
 
 #+NAME: Sample-good_limits-example
-#+BEGIN_SRC python :session *Python*
+#+BEGIN_SRC python :session *Python* :exports both
 Evts.good_limits
 #+END_SRC
 
@@ -2747,7 +2747,16 @@ plt.close()
 
 ** Sample4Clust Class
 
-We define next a subclass of =Sample= that we call =Sample4Clust=. This class will contain a "clean" sub-sample of the events of the parent =Sample= instance. This clean sub-sample will moreover be normalized, that is, the median of each channel will be subtracted from the corresponding sample points of the events that will also be divided by the MAD of the channel.
+We define next a subclass of =Sample= that we call =Sample4Clust=. This class will contain a "clean" sub-sample of the events of the parent =Sample= instance. This clean sub-sample is obtained by calling method =good_events= of =Sample= instances; it is moreover normalized, that is, the median of each channel will be subtracted from the corresponding sample points of the events that will also be divided by the MAD of the channel. In addition to the attributes and methods of the Sample instances, instances of =Sample4Clust= have:
++ =u=, =s= and =v=: two unitary matrices (=u= and =v=) and a vector (=s=) returned by [[http://docs.scipy.org/doc/numpy/reference/generated/numpy.linalg.svd.html#numpy.linalg.svd][svd]], the =numpy.linalg= function performing singular value decomposition.
++ =cluster=: a vector of integers containing the label / cluster of origin of each element (row) of =cuts= attribute matrix; this vector is initialized at 0.
+The following methods are defined:
++ =plotPCA=: plots the mean event together with the mean event plus or minus a number multiplying a selected principal component; this is usual to grab what the different principal components are describing.
++ =project=: projects the events onto the principal components subspace specified by a user choice and return a matrix.
++ =csv=: writes the matrix obtained with method =project= to a file in =csv= format; the content of attribute =cluster= can be added as a column of this matrix; this file is suitable for visualization with [[http://www.ggobi.org/][GGobi]].
++ =find_clusters=: does unsupervised clustering with the kmeans or with a Gaussian mixture model fitted with the EM algorithm; the number of clusters is set by the user; attribute =cluster= is updated as a result and a short description of the result is printed to the standard output.
++ =merge_clusters=: merges two or more clusters specified by the user; attribute =cluster= is updated as a result.
++ =split_cluster=: splits a user specified cluster in a user specified number of clusters using the same algorithms as method =find_clusters=.
 
 #+NAME: Sample4Clust-Class-definition
 #+BEGIN_SRC python :session *Python* :results silent
@@ -2921,7 +2930,7 @@ class Sample4Clust(Sample):
             else:
                 print("Cluster " + str(i) + ": " + str(nb_evts) + "  (" + str(pct_evts) + "%)")
         print("Total number of events: " + str(nb_total))
-    def merge_cluster(self,cluster2merge):
+    def merge_clusters(self,cluster2merge):
         """Merge clusters whose numbers are in list cluster2merge."""
         import numpy as np
         if not isinstance(cluster2merge,list):
@@ -2981,33 +2990,166 @@ class Sample4Clust(Sample):
         
 #+END_SRC
 
-#+BEGIN_SRC python :session *Python* :results output
+*** Example of use
+
+We get a 'clean and normalized' version of our previous =Evts= with:
+
+#+NAME: Sample4Clust-instanciation-example
+#+BEGIN_SRC python :session *Python* :results output :exports both
 EvtsG = Sample4Clust(Evts,valley=True,upper_thr=10,lower_thr=-6)
 print(EvtsG)
 #+END_SRC
 
-#+RESULTS:
+#+RESULTS: Sample4Clust-instanciation-example
 : 
 : An instance of Sample4Clust.
 :   The instance contains: 1988 events.
 :   The cuts are: 32 sampling points long.
 :   The reference time is located at position 8 within each cut (indexes start at 0).
 
-#+BEGIN_SRC python :session *Python* :results output
+We can then make a figure displaying the first 4 principal components as we did before with:
+
+#+NAME: Sample4Clust-plotPCA-example
+#+BEGIN_SRC python :session *Python* :results silent
+for i in range(4):
+    plt.subplot(2,2,i+1)
+    EvtsG.plotPCA(i)
+#+END_SRC
+
+To construct a matrix of scatter plots with the events projected on the first principal components we use:
+
+#+NAME: Sample4Clust-project-etc-example
+#+BEGIN_SRC python :session *Python* :results silent
+from pandas.tools.plotting import scatter_matrix
+import pandas as pd
+df = pd.DataFrame(EvtsG.project([0,1,2,3]))
+scatter_matrix(df,alpha=0.2,s=4,c='k',figsize=(6,6),
+               diagonal='kde',marker=".")
+#+END_SRC
+
+We can then write the events projected onto the sub-space defined by the first 4 principal components with:
+
+#+NAME: Sample4Clust-csv-example1
+#+BEGIN_SRC python :session *Python* :results silent
+EvtsG.csv('EvtsG.csv',components=range(4))
+#+END_SRC
+
+A clustering with 7 clusters using the kmeans algorithm (the default) and the events projected onto the first 4 PCs (the default) is done with:
+
+#+NAME: Sample4Clust-find_clusters-example
+#+BEGIN_SRC python :session *Python* :results output :exports both
 EvtsG.find_clusters(7)
 #+END_SRC
 
-#+RESULTS:
+#+RESULTS: Sample4Clust-find_clusters-example
 : Number of events of each cluster (percent of events):
 : Cluster  0: 147  (7.4%)
 : Cluster  1: 118  (5.9%)
-: Cluster  2: 69  (3.5%)
-: Cluster  3: 457  (23.0%)
-: Cluster  4: 379  (19.1%)
-: Cluster  5: 430  (21.6%)
-: Cluster  6: 388  (19.5%)
+: Cluster  2: 68  (3.4%)
+: Cluster  3: 461  (23.2%)
+: Cluster  4: 383  (19.3%)
+: Cluster  5: 436  (21.9%)
+: Cluster  6: 375  (18.9%)
 : Total number of events: 1988
 
+To build a plot with the events of the different clusters as we did before we call:
+
+#+NAME: Sample4Clust-plot-example1
+#+BEGIN_SRC python :session *Python* :results silent
+for i in range(4):
+    plt.subplot(4,1,i+1)
+    EvtsG[EvtsG.cluster==i].plot()
+    plt.ylim([-20,15])
+#+END_SRC
+
+The last three clusters are displayed with:
+
+#+NAME: Sample4Clust-plot-example2
+#+BEGIN_SRC python :session *Python* :results silent
+for i in range(3):
+    plt.subplot(3,1,i+1)
+    EvtsG[EvtsG.cluster==i+4].plot()
+    plt.ylim([-10,5])
+#+END_SRC
+
+We could draw on the same graph all the events of cluster 0 (in black) and all the events of cluster 2 (in orange) with:
+
+#+NAME: Sample4Clust-plot-example3
+#+BEGIN_SRC python :session *Python* :results silent
+EvtsG[EvtsG.cluster==0].plot(show_median=False,show_mad=False)
+EvtsG[EvtsG.cluster==2].plot(events_color='orange',show_median=False,show_mad=False)
+plt.ylim([-10,10])
+#+END_SRC
+
+We could merge these two clusters with:
+
+#+NAME: Sample4Clust-merge_clusters-example
+#+BEGIN_SRC python :session *Python* :results silent
+EvtsG.merge_clusters([0,2])
+#+END_SRC
+
+To see in what cluster they ended up we call the =print= special method and compare its output with our initial call to the =find_clusters= method:
+
+#+NAME: Sample4Clust-print-example1
+#+BEGIN_SRC python :session *Python* :results output :exports both
+print(EvtsG)
+#+END_SRC
+
+#+RESULTS: Sample4Clust-print-example1
+#+begin_example
+An instance of Sample4Clust.
+  The instance contains: 1988 events.
+  The cuts are: 32 sampling points long.
+  The reference time is located at position 8 within each cut (indexes start at 0).
+  The number of events of each cluster (percent of events):
+    Cluster 0: 215  (10.8%)
+    Cluster 1: 118  (5.9%)
+    Cluster 2: 461  (23.2%)
+    Cluster 3: 383  (19.3%)
+    Cluster 4: 436  (21.9%)
+    Cluster 5: 375  (18.9%)
+#+end_example
+
+We see that the new cluster 0 has the same number of events than the sum of the events of two previous clusters we just merged (0 and 2).
+
+We can split this new cluster 0 into 2 clusters using the kmeans with:
+
+#+NAME: Sample4Clust-split_cluster-example
+#+BEGIN_SRC python :session *Python* :results output :exports both
+EvtsG.split_cluster(0,2)
+#+END_SRC
+
+#+RESULTS: Sample4Clust-split_cluster-example
+: Number of events of each sub-cluster (percent of events) of cluster 0:
+: Sub-cluster  0: 68  (31.6%)
+: Sub-cluster  1: 147  (68.4%)
+: Total number of events: 215
+
+And the =print= special method gives:
+
+#+NAME: Sample4Clust-print-example2
+#+BEGIN_SRC python :session *Python* :results output :exports both
+print(EvtsG)
+#+END_SRC
+
+#+RESULTS: Sample4Clust-print-example2
+#+begin_example
+An instance of Sample4Clust.
+  The instance contains: 1988 events.
+  The cuts are: 32 sampling points long.
+  The reference time is located at position 8 within each cut (indexes start at 0).
+  The number of events of each cluster (percent of events):
+    Cluster 0: 147  (7.4%)
+    Cluster 1: 118  (5.9%)
+    Cluster 2: 68  (3.4%)
+    Cluster 3: 461  (23.2%)
+    Cluster 4: 383  (19.3%)
+    Cluster 5: 436  (21.9%)
+    Cluster 6: 375  (18.9%)
+#+end_example
+
+So we are back to where we started.
+ 
 * Clean up, etc :export:
 
 #+BEGIN_SRC python :session *Python*
