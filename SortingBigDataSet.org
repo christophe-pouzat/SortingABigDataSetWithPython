@@ -2411,63 +2411,50 @@ print(Spike0)
 
 If we generate a plot =Spike0.plot()= at that stage, the four recording sites are going to be shown even if the detection was only done on the first.
 
-** Sample Class
+** Cuts and Sample Classes
 
-=Class= =Sample= is designed to contain the events' sample, that is a collection of cuts around each detected spikes. Instances of this class have the following attributes:
-+ =cuts=: a matrix with the cuts, each of the 'number of events' rows contains an event with the spike waveform on the different recording sites put one after the other.
-+ =before=: a positive integer, the number of sampling points (within the cut) before the reference time.
-+ =after=: a positive integer, the number of sampling points (within the cut) after the reference time---the cut length equals before+after+1, stated differently it goes from -before to after with the reference time set at 0.
+=Class Cuts= is designed to hold "cuts", that is portions of raw data including a given number of measurements before a reference point as well as,  in general, a different number of measurements after this reference point. When the data are multi channel data, a cut is made on all the channels at the indexes and all the cut are pasted one after the other in channel order. An instance of =Cuts= contains essentially a matrix whose rows are the successive cuts. The class provides facilities for extracting statistics (mean, median, mad, std, var), plotting, copying and subsetting. Instances of this class have the following attributes:
++ =cuts=: a matrix with the cuts.
++ =n_channels=: a positive integer, the number of recording channels.
 + =shape=: a tuple (number of events, cut length x number of channels).
-+ =mean=: a vector, the mean event.
-+ =median=: a vector, the median event.
-+ =mad=: a vector, the mad of the events' sample.
-+ =std=: a vector, the standard deviation of the events' sample.
-+ =var=: a vector, the variance of the events' sample.
-+ =good_limits=: a dictionary with entries 'before' and 'after' giving the 'recommended' cut parameters based on the domain over which the events' sample MAD exceeds the full trace MAD.
-The following methods are available:
-+ =plotM=: generates a plot with the events' sample median and the events' sample MAD to which the median has been added; this method is designed to guide a visual setting of the 'right' cut parameters 'before' and 'after'.
-+ =plot=: generates a plot of the events with the events' sample median and MAD.
-+ =good_events=: returns a Boolean vector whose elements are True for events 'close' enough to the median event and False otherwise. 
-A  =print= special method is defined returning a short written summary of the instance content and subsetting can be performed on the object like on a "classical" matrix.   
++ =mean=: a vector, the mean cut.
++ =median=: a vector, the median cut.
++ =mad=: a vector, the mad of the cuts' sample.
++ =std=: a vector, the standard deviation of the cuts' sample.
++ =var=: a vector, the variance of the cuts' sample.
 
-#+NAME: Sample-Class-definition
+#+NAME: Cuts-Class-definition
 #+BEGIN_SRC python :session *Python* :results silent
-class Sample:
-    """Events' sample: a collection of cuts around detected spikes."""
-    def __init__(self, DS_instance, before=14, after=30, cuts=None):
-        """Create a new Sample instance.
+class Cuts:
+    """A matrix of cuts from multi channel data."""
+    def __init__(self,cuts,n_channels=4):
+        """Create a new Cuts instance.
 
-        DS_instance a DetectedSpikes instance
-        before a positive integer specifying were the cut starts before the spike position
-        after  a positive integer specifying were the cut ends after the spike position
-        cuts   a matrix of cuts or None
+        cuts        the matrix of cuts, individual cuts making 
+                    successive rows of the matrix
+        n_channels  a positive integer, the number of channels
         """
         import numpy as np
-        if not isinstance(DS_instance,DetectedSpikes):
-            raise TypeError('DS_instance must be a DetectedSpikes instance')
-        if not isinstance(before,int) or before <= 0:
-            raise TypeError('before must be a positive integer')
-        if not isinstance(after,int) or after <= 0:
-            raise TypeError('after must be a positive integer')
-        if not cuts is None and not isinstance(cuts,np.ndarray):
+        if not isinstance(cuts,np.ndarray):
             raise TypeError('cuts must be an array')
-        if cuts is None:
-            cuts = DS_instance.mk_cuts(before,after)
-        if not cuts.shape == (len(DS_instance),DS_instance._MCD.data.shape[0]*(before+after+1)):
-            raise ValueError('cuts must be a matrix with ' + str(len(DS_instance)) + ' rows and '\
-                             + str(DS_instance._MCD.data.shape[0]*(before+after+1)) + ' columns')
-        self._cuts = cuts
-        self.before = before
-        self.after = after
-        self._DS = DS_instance
+        if len(cuts.shape) == 1:
+            cuts.shape = (1,len(cuts))
+        if len(cuts.shape) > 2:
+            raise TypeError('cuts must be a matrix')
+        if not isinstance(n_channels,int) or n_channels <= 0:
+            raise TypeError('n_channels must be a positive integer')
+        if not cuts.shape[1]%n_channels == 0:
+            raise ValueError('n_channels should divide the number of columns of cuts')
+        self._cuts = cuts.copy()
+        self.n_channels = n_channels
+    @property
+    def cuts(self):
+        """Get the cuts."""
+        return self._cuts
     @property
     def shape(self):
         """The shape."""
         return self._cuts.shape
-    @property
-    def cuts(self):
-        """Get the data."""
-        return self._cuts
     @property
     def mean(self):
         """Mean sample member."""
@@ -2493,11 +2480,96 @@ class Sample:
         """Sample's variance."""
         import numpy as np
         return np.var(self._cuts,axis=0)
+    def __getitem__(self,key):
+        """Return a new subsetted instance."""
+        cuts = self._cuts[key]
+        return Cuts(cuts,self.n_channels)
+    def copy(self):
+        """Return a new instance that is a copy of the present one."""
+        return Cuts(self._cuts,self.n_channels)
+    def plot(self,events_color='black',events_lw=0.1,
+             show_median=True,median_color='red',
+             median_lw=1,show_mad=True,
+             mad_color='blue',mad_lw=1):
+        """Plot Cuts.
+
+        events_color color used for the events
+        events_lw    line width used for the events
+        show_median  should the median be shown
+        median_color color used for the median if shown
+        median_lw    line width used for the median if shown
+        show_mad     should the mad be shown
+        mad_color    color used for the mad if shown
+        mad_lw       line width used for the mad if shown
+        """
+        import numpy as np
+        import matplotlib.pylab as plt
+        cut_length = self.cuts.shape[1]//self.n_channels
+        plt.plot(self.cuts.T,color=events_color, lw=events_lw)
+        left_boundary = np.arange(cut_length,
+                                  self.shape[1],
+                                  cut_length*2)
+        for l in left_boundary:
+            plt.axvspan(l,l+cut_length-1,
+                        facecolor='grey',alpha=0.5,edgecolor='none')
+        if show_median:
+            plt.plot(self.median, color=median_color, lw=median_lw)
+        if show_mad:
+            plt.plot(self.mad+max(0,np.median(self.cuts)), color=mad_color, lw=mad_lw)
+            print('The MAD is displayed with an offset of: ' + str(max(0,np.median(self.cuts))))
+        plt.xticks([])
+        plt.xlim([0,self.shape[1]])
+        plt.ylim([np.min(self.cuts),np.max(self.cuts)])
+
+#+END_SRC 
+
+
+=Class= =Sample= is designed to contain the events' sample, that is a collection of cuts around each detected spikes. Instances of this class inherit from the =Cuts= class and have the following additional attributes:
++ =before=: a positive integer, the number of sampling points (within the cut) before the reference time.
++ =after=: a positive integer, the number of sampling points (within the cut) after the reference time---the cut length equals before+after+1, stated differently it goes from -before to after with the reference time set at 0.
++ =good_limits=: a dictionary with entries 'before' and 'after' giving the 'recommended' cut parameters based on the domain over which the events' sample MAD exceeds the full trace MAD.
+The following methods are available:
++ =plotM=: generates a plot with the events' sample median and the events' sample MAD to which the median has been added; this method is designed to guide a visual setting of the 'right' cut parameters 'before' and 'after'.
++ =plot=: generates a plot of the events with the events' sample median and MAD.
++ =good_events=: returns a Boolean vector whose elements are True for events 'close' enough to the median event and False otherwise. 
+A  =print= special method is defined returning a short written summary of the instance content and subsetting can be performed on the object like on a "classical" matrix.   
+
+#+NAME: Sample-Class-definition
+#+BEGIN_SRC python :session *Python* :results silent
+class Sample(Cuts):
+    """Events' sample: a collection of cuts around detected spikes."""
+    def __init__(self, DS_instance, before=14, after=30, cuts=None):
+        """Create a new Sample instance.
+
+        DS_instance a DetectedSpikes instance
+        before a positive integer specifying were the cut starts before the spike position
+        after  a positive integer specifying were the cut ends after the spike position
+        cuts   a matrix of cuts or None
+        """
+        import numpy as np
+        if not isinstance(DS_instance,DetectedSpikes):
+            raise TypeError('DS_instance must be a DetectedSpikes instance')
+        if not isinstance(before,int) or before <= 0:
+            raise TypeError('before must be a positive integer')
+        if not isinstance(after,int) or after <= 0:
+            raise TypeError('after must be a positive integer')
+        if not cuts is None and not isinstance(cuts,np.ndarray):
+            raise TypeError('cuts must be an array')
+        if cuts is None:
+            cuts = DS_instance.mk_cuts(before,after)
+        if not cuts.shape == (len(DS_instance),DS_instance._MCD.data.shape[0]*(before+after+1)):
+            raise ValueError('cuts must be a matrix with ' + str(len(DS_instance)) + ' rows and '\
+                             + str(DS_instance._MCD.data.shape[0]*(before+after+1)) + ' columns')
+        self._cuts = cuts
+        self.n_channels = DS_instance._MCD.data.shape[0]
+        self.before = before
+        self.after = after
+        self._DS = DS_instance
     @property
     def good_limits(self):
         """An array with the limits within which the MAD is above 'noise' level."""
         import numpy as np
-        n_channels = self._DS._MCD.data.shape[0]
+        n_channels = self.n_channels
         cut_length = self.before + self.after + 1
         MAD = self.mad / np.repeat(self._DS._MCD.mad,cut_length) # Normalize MAD of each channel
         MAD.shape = (n_channels,cut_length) # make it a matrix
@@ -2539,41 +2611,6 @@ class Sample:
             plt.axvline(x=i, color='black', lw=2)
         for i in np.arange(0,cut_length*n_channels,v_spacing): 
             plt.axvline(x=i, color='black')
-    def plot(self,events_color='black',events_lw=0.1,
-             show_median=True,median_color='red',
-             median_lw=1,show_mad=True,
-             mad_color='blue',mad_lw=1):
-        """Plot Sample.
-
-        events_color color used for the events
-        events_lw    line width used for the events
-        show_median  should the median be shown
-        median_color color used for the median if shown
-        median_lw    line width used for the median if shown
-        show_mad  should the mad be shown
-        mad_color color used for the mad if shown
-        mad_lw    line width used for the mad if shown
-        """
-        import numpy as np
-        import matplotlib.pylab as plt
-        n_channels = self._DS._MCD._data.shape[0]
-        cut_length = self.before + self.after + 1
-        for i in range(self.shape[0]):
-            plt.plot(self._cuts[i,:], color=events_color, lw=events_lw)
-        if show_median:
-            plt.plot(self.median, color=median_color, lw=median_lw)
-        if show_mad:
-            MAD = self.mad + np.repeat(self._DS._MCD.median,cut_length)
-            plt.plot(MAD, color=mad_color, lw=mad_lw)
-        left_boundary = np.arange(cut_length,
-                                  self.shape[1],
-                                  cut_length*2)
-        for l in left_boundary:
-            plt.axvspan(l,l+cut_length-1,
-                        facecolor='grey',alpha=0.5,edgecolor='none')
-        plt.xticks([])
-        plt.xlim([0,self.shape[1]])
-        plt.ylim([np.min(self.cuts),np.max(self.cuts)])
     def __getitem__(self,key):
         """Return a new subsetted instance."""
         cuts = self._cuts[key]
@@ -2682,12 +2719,18 @@ Evts[:200,:].plot()
 The =good_events= method is slightly more sophisticated than our previous function doing the same job since it potentially differentiates between positive and negative deviations. We can see its effect on the following graph where the first 500 good events are shown on the top and all the bad ones are shown at the bottom. We are using the fact that the complementary of a =numpy Boolean vector= is obtained by taking its opposite.
 
 #+NAME: Sample-good_events-example
-#+BEGIN_SRC python :session *Python* :results silent
+#+BEGIN_SRC python :session *Python* :results output :expors both
 plt.subplot(211)
 Evts[Evts.good_events(valley=True,upper_thr=10,lower_thr=-6),:][:500,:].plot()
 plt.subplot(212)
 Evts[-Evts.good_events(valley=True,upper_thr=10,lower_thr=-6),:].plot()
 #+END_SRC
+
+#+RESULTS: Sample-good_events-example
+: <matplotlib.axes._subplots.AxesSubplot object at 0x7f01d6730438>
+: The MAD is displayed with an offset of: 2059.0
+: <matplotlib.axes._subplots.AxesSubplot object at 0x7f01d576bc18>
+: The MAD is displayed with an offset of: 2087.0
 
 #+NAME: Sample-good_events-example-fig
 #+BEGIN_SRC python :exports results :results file :session *Python*
@@ -2730,6 +2773,7 @@ class Sample4Clust(Sample):
             raise TypeError('lower_thr must be a negative number')
         good = Sample_instance.good_events(valley=valley,upper_thr=upper_thr,lower_thr=lower_thr)
         self._cuts = Sample_instance.cuts[good,:].copy()
+        self.n_channels = Sample_instance.n_channels
         self._Sample = Sample_instance
         self._DS = Sample_instance._DS[good]
         self.before = Sample_instance.before
@@ -2753,6 +2797,12 @@ class Sample4Clust(Sample):
                            lower_thr=self._lower_thr)
         new.cluster = self.cluster.copy()
         return new
+    def __getitem__(self,key):
+        """Return a new subsetted instance."""
+        new = self.copy()
+        new._cuts = new._cuts[key]
+        new.cluster = new.cluster[key]
+        return new
     def __str__(self):
         """Controls the printed version of the instance."""
         import numpy as np
@@ -2767,50 +2817,6 @@ class Sample4Clust(Sample):
                        + "  (" + str(round(100*sum(self.cluster==i)/nb_total,1)) + "%)" \
                        for i in range(np.max(self.cluster)+1)])
         return blabla  
-    def plot(self,cluster=None,events_color='black',events_lw=0.1,
-             show_median=True,median_color='red',
-             median_lw=1,show_mad=True,
-             mad_color='blue',mad_lw=1):
-        """Plot Sample4Clust.
-        
-        cluster      the cluster(s) to show, if none, all clusters are shown 
-        events_color color used for the events
-        events_lw    line width used for the events
-        show_median  should the median be shown
-        median_color color used for the median if shown
-        median_lw    line width used for the median if shown
-        show_mad     should the mad be shown
-        mad_color    color used for the mad if shown
-        mad_lw       line width used for the mad if shown
-        """
-        import numpy as np
-        import matplotlib.pylab as plt
-        if cluster is None:
-            good = slice(self.cuts.shape[0])
-        elif isinstance(cluster,int):
-            good = self.cluster == cluster
-        else:
-            good = [x in cluster for x in self.cluster]
-        n_channels = self._DS._MCD._data.shape[0]
-        cut_length = self.before + self.after + 1
-        evts = self._cuts[good,:]
-        for i in range(evts.shape[0]):
-            plt.plot(evts[i,:], color=events_color, lw=events_lw)
-        MED = np.median(evts,axis=0)
-        MAD = np.median(np.abs(evts-MED.reshape(1,self.shape[1])),axis=0)*1.4826
-        if show_median:
-            plt.plot(MED, color=median_color, lw=median_lw)
-        if show_mad:
-            plt.plot(MAD, color=mad_color, lw=mad_lw)
-        left_boundary = np.arange(cut_length,
-                                  self.shape[1],
-                                  cut_length*2)
-        for l in left_boundary:
-            plt.axvspan(l,l+cut_length-1,
-                        facecolor='grey',alpha=0.5,edgecolor='none')
-        plt.xticks([])
-        plt.xlim([0,self.shape[1]])
-        plt.ylim([np.min(self.cuts),np.max(self.cuts)])
     def plotPCA(self,component=0,factor=5,lw=2):
         """Plot Mean +/- factor x Principal Component."""
         import numpy as np
@@ -2915,6 +2921,20 @@ class Sample4Clust(Sample):
             else:
                 print("Cluster " + str(i) + ": " + str(nb_evts) + "  (" + str(pct_evts) + "%)")
         print("Total number of events: " + str(nb_total))
+    def merge_cluster(self,cluster2merge):
+        """Merge clusters whose numbers are in list cluster2merge."""
+        import numpy as np
+        if not isinstance(cluster2merge,list):
+            raise TypeError('cluster2merge should be a list')
+        if not all([x in range(np.max(self.cluster)) for x in cluster2merge]):
+            raise ValueError('cluster2merge should be a list of integers between 0 and ' + str(np.max(self.cluster)))
+        cluster2merge.sort()
+        new_numbers = list(range(np.max(self.cluster)+1-len(cluster2merge)+1))
+        for i in range(1,len(cluster2merge)):
+            new_numbers.insert(cluster2merge[i],cluster2merge[0])
+        for i in range(np.max(self.cluster)+1):
+            self.cluster[self.cluster==i] = new_numbers[i]
+        self._order_clusters
     def split_cluster(self,cluster2split=0,split_into=2,method='kmeans',components=slice(4),n_init=100):
         """Unsupervised clustering with split_into on a projected version of the events belonging to cluster cluster2split.
 
@@ -2979,13 +2999,13 @@ EvtsG.find_clusters(7)
 
 #+RESULTS:
 : Number of events of each cluster (percent of events):
-: Cluster  0: 146  (7.3%)
-: Cluster  1: 117  (5.9%)
+: Cluster  0: 147  (7.4%)
+: Cluster  1: 118  (5.9%)
 : Cluster  2: 69  (3.5%)
-: Cluster  3: 468  (23.5%)
-: Cluster  4: 378  (19.0%)
-: Cluster  5: 431  (21.7%)
-: Cluster  6: 379  (19.1%)
+: Cluster  3: 457  (23.0%)
+: Cluster  4: 379  (19.1%)
+: Cluster  5: 430  (21.6%)
+: Cluster  6: 388  (19.5%)
 : Total number of events: 1988
 
 * Clean up, etc :export:
