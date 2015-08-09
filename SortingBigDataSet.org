@@ -2063,7 +2063,7 @@ help(Data.plot)
 #+RESULTS: MultiChannelData-plot-doc
 : Help on method plot in module __main__:
 : 
-: plot(linewidth=0.2, color='black', xlabel='Time (s)') method of __main__.MultiChannelData instance
+: plot(linewidth=0.2, color='black', xlabel='Time (s)', data_range=None) method of __main__.MultiChannelData instance
 :     Plot the data.
 
 Making a plot is rather easy (result not shown):
@@ -2707,7 +2707,7 @@ Evts.good_limits
 #+END_SRC
 
 #+RESULTS: Sample-good_limits-example
-| after | : | 23 | before | : | 8 |
+| before | : | 8 | after | : | 23 |
 
 We see that we get here a slightly tighter cut than we did previously with our visual setting. We then redo our cuts with these parameters:
 
@@ -2742,9 +2742,9 @@ Evts[-Evts.good_events(valley=True,upper_thr=10,lower_thr=-9),:].plot()
 #+END_SRC
 
 #+RESULTS: Sample-good_events-example
-: <matplotlib.axes._subplots.AxesSubplot object at 0x7f22465c75c0>
+: <matplotlib.axes._subplots.AxesSubplot object at 0x7f3cdf93ba20>
 : The MAD is displayed with an offset of: 2061.0
-: <matplotlib.axes._subplots.AxesSubplot object at 0x7f222a08afd0>
+: <matplotlib.axes._subplots.AxesSubplot object at 0x7f3cdf73dba8>
 : The MAD is displayed with an offset of: 2081.0
 
 #+NAME: Sample-good_events-example-fig
@@ -2859,9 +2859,21 @@ class Sample4Clust(Sample):
             plt.axvspan(l,l+cut_length-1,
                         facecolor='grey',alpha=0.5,edgecolor='none')
     def project(self,components=slice(4)):
-        """Project events onto principal components subspace specified by components."""
+        """Project events onto principal components (or other an other vectors set) subspace specified by components.
+        
+        components either a slice specifying the Principal components to use or a matrix
+                   with as many rows as 'the cut length x number of channels' and as
+                   many columns as the desired subspace dimension.
+        """
         import numpy as np
-        return np.dot(self.cuts,self.u[:,components])
+        if isinstance(components,np.ndarray):
+            if len(components.shape) > 2:
+                raise ValueError('components must have dimension 1 or 2')
+            if components.shape[0] != self.u.shape[0]:
+                raise ValueError('components must have ' + str(self.u.shape[0]) + ' rows')
+            return np.dot(self.cuts,components)
+        else:
+            return np.dot(self.cuts,self.u[:,components])
     def csv(self,filename,components=slice(4),include_cluster=False):
         """Write projected events into file in csv format optionnaly including cluster membership.
 
@@ -2917,7 +2929,8 @@ class Sample4Clust(Sample):
         nb_clusters  an integer > 1, the number of clusters
         method       a string 'kmeans' or 'EM4GMM' (E-M algorithm for Gaussian mixture model),
                      the clustering procedure to use.
-        components   the principle components onto which to project
+        components   the principle components onto which to project or a matrix whose columns
+                     are the vectors defining the subspace onto which to project.
         n_init       number of different initial partitions used to run the clustering algorithms
         
         Side effect
@@ -3100,9 +3113,9 @@ EvtsG.find_clusters(7)
 : Cluster  1: 281  (12.7%)
 : Cluster  2: 122  (5.5%)
 : Cluster  3: 79  (3.6%)
-: Cluster  4: 577  (26.0%)
+: Cluster  4: 583  (26.3%)
 : Cluster  5: 396  (17.8%)
-: Cluster  6: 706  (31.8%)
+: Cluster  6: 700  (31.5%)
 : Total number of events: 2219
 
 To build a plot with the events of the different clusters as we did before we call:
@@ -3125,7 +3138,7 @@ for i in range(3):
     plt.ylim([-10,5])
 #+END_SRC
 
-We can split this new cluster 1 into 2 clusters using the kmeans with:
+We can trys to split cluster 1 into 2 clusters since some events in this cluster exhibit a pronounced early peak on the second recording site (site 1 since numbering starts at 0) using the kmeans with:
 
 #+NAME: Sample4Clust-split_cluster-example
 #+BEGIN_SRC python :session *Python* :results output :exports both
@@ -3134,8 +3147,8 @@ EvtsG.split_cluster(1,2)
 
 #+RESULTS: Sample4Clust-split_cluster-example
 : Number of events of each sub-cluster (percent of events) of cluster 1:
-: Sub-cluster  0: 149  (53.0%)
-: Sub-cluster  1: 132  (47.0%)
+: Sub-cluster  0: 132  (47.0%)
+: Sub-cluster  1: 149  (53.0%)
 : Total number of events: 281
 
 #+NAME: Sample4Clust-print-example1
@@ -3155,97 +3168,99 @@ An instance of Sample4Clust.
     Cluster 2: 132  (5.9%)
     Cluster 3: 122  (5.5%)
     Cluster 4: 79  (3.6%)
-    Cluster 5: 577  (26.0%)
+    Cluster 5: 583  (26.3%)
     Cluster 6: 396  (17.8%)
-    Cluster 7: 706  (31.8%)
+    Cluster 7: 700  (31.5%)
 #+end_example
 
-We see that former cluster 1 became clusters 1 and 2. If we look at those two we see that the split was not done as we wanted so we merge the two clusters first:
+But a plot of the two new clusters, 1 and 2 shows that we did not obtain what we wanted since the new cluster 2 exhibits a mixture of the 2 types of events (with and without an early peak on site 1):
+
+#+NAME: Sample4Clust-plot-example3
+#+BEGIN_SRC python :session *Python* :results silent
+for i in range(1,3):
+    plt.subplot(2,1,i)
+    EvtsG[EvtsG.cluster==i].plot()
+    plt.ylim([-20,15])
+#+END_SRC
+
+Before going further we step back and merge the two clusters (1 and 2):
 
 #+NAME: Sample4Clust-merge_clusters-example
 #+BEGIN_SRC python :session *Python* :results silent
 EvtsG.merge_clusters([1,2])
 #+END_SRC
 
-Here it's a bit tricky. We want to pull out, among the events of what is now cluster 1, the ones with a pronounced early peak *on channel 1*. If we look at our PCA plot, we see that PCs 0, 2 and 3 (but not 1) catch variability mainly on channel 1. We will therefore use projections on those three PCs. Then trying to split cluster 1 in two clusters using a Gaussian mixture model fitted with the EM algorithm still does not do exactly the job, so we split in 3 first and merge afterwards the two similar ones:
+Now if we make a plot of cluster 1 and zoom on site 1, we see that the two waveform differ most at point 35, 36 and 37 (the orange vertical lines):
+
+#+NAME: Sample4Clust-plot-example4
+#+BEGIN_SRC python :session *Python* :results silent
+EvtsG[EvtsG.cluster==1].plot()
+plt.xlim([32,63])
+plt.axvline(35,lw=2,color='orange')
+plt.axvline(36,lw=2,color='orange')
+plt.axvline(37,lw=2,color='orange')
+plt.ylim([-20,15])
+#+END_SRC
+
+So we can try splitting cluster 1 again into two cluster but projecting the sample onto a subspace defined by the units vectors of dimensions 35, 36 and 37 (this amounts to selecting the amplitude at those points only). We do this as follows, exploiting the fact that the =project= method of =Sample4Clust= instances allows us to select either principal components or to give a matrix whose column space spans the subspace we want to project onto. So we do:
 
 #+NAME: Sample4Clust-split_cluster-example2
 #+BEGIN_SRC python :session *Python* :results output :exports both
-EvtsG.split_cluster(cluster2split=1,split_into=3,method='EM4GMM',components=[0,2,3])
+my_sub_space = np.zeros((128,3))
+my_sub_space[35,0]=1
+my_sub_space[36,1]=1
+my_sub_space[37,2]=1
+EvtsG.split_cluster(cluster2split=1,split_into=2,method='kmeans',components=my_sub_space)
 #+END_SRC
 
-#+RESULTS: Sample4Clust-split_cluster-example2
+#+RESULTS: Sample4Clust-split_cluster-example2 
+: 
 : Number of events of each sub-cluster (percent of events) of cluster 1:
-: Sub-cluster  0: 150  (53.4%)
-: Sub-cluster  1: 93  (33.1%)
-: Sub-cluster  2: 38  (13.5%)
+: Sub-cluster  0: 26  (9.3%)
+: Sub-cluster  1: 255  (90.7%)
 : Total number of events: 281
 
+#+NAME: Sample4Clust-print-example2
 #+BEGIN_SRC python :session *Python* :results output :exports both
 print(EvtsG)
 #+END_SRC
 
-#+RESULTS:
+#+RESULTS: Sample4Clust-print-example2
 #+begin_example
 An instance of Sample4Clust.
   The instance contains: 2219 events.
   The cuts are: 32 sampling points long.
   The reference time is located at position 8 within each cut (indexes start at 0).
   The number of events of each cluster (percent of events):
-    Cluster 0: 38  (1.7%)
+    Cluster 0: 26  (1.2%)
     Cluster 1: 58  (2.6%)
-    Cluster 2: 150  (6.8%)
-    Cluster 3: 93  (4.2%)
-    Cluster 4: 122  (5.5%)
-    Cluster 5: 79  (3.6%)
-    Cluster 6: 577  (26.0%)
-    Cluster 7: 396  (17.8%)
-    Cluster 8: 706  (31.8%)
+    Cluster 2: 255  (11.5%)
+    Cluster 3: 122  (5.5%)
+    Cluster 4: 79  (3.6%)
+    Cluster 5: 583  (26.3%)
+    Cluster 6: 396  (17.8%)
+    Cluster 7: 700  (31.5%)
 #+end_example
 
-We see that former cluster 1 has be split into new clusters 0, 2 and 3. A plot of those:
+We see that former cluster 1 has be split into new clusters 0, and 2. A plot of those shows that the two waveform differ not only by the presence or absence of an early peak on site 1, but also on the shape of their valleys on this site:
 
 #+BEGIN_SRC python :session *Python* :results silent
-for i in range(4):
-    plt.subplot(4,1,i+1)
-    EvtsG[EvtsG.cluster==i].plot()
-    plt.ylim([-20,15])
+plt.subplot(2,1,1)
+EvtsG[EvtsG.cluster==0].plot()
+plt.ylim([-15,15])
+plt.subplot(2,1,2)
+EvtsG[EvtsG.cluster==2].plot()
+plt.ylim([-15,15])
 #+END_SRC
 
-We can draw on the same graph all the events of cluster 2 (in black) and all the events of cluster 3 (in orange) with:
+We can also draw on the same graph all the events of cluster 2 (in black) and all the events of cluster 0 (in orange) with:
 
 #+NAME: Sample4Clust-plot-example3
 #+BEGIN_SRC python :session *Python* :results silent
 EvtsG[EvtsG.cluster==2].plot(show_median=False,show_mad=False)
-EvtsG[EvtsG.cluster==3].plot(events_color='orange',show_median=False,show_mad=False)
-plt.ylim([-15,10])
+EvtsG[EvtsG.cluster==0].plot(events_color='orange',show_median=False,show_mad=False)
+plt.ylim([-15,15])
 #+END_SRC
-
-Since they are indeed very similar, we merge them:
-
-#+NAME: Sample4Clust-merge_clusters-example2
-#+BEGIN_SRC python :session *Python* :results output :exports both
-EvtsG.merge_clusters([2,3])
-print(EvtsG)
-#+END_SRC
-
-#+RESULTS: Sample4Clust-merge_clusters-example2
-#+begin_example
-
-An instance of Sample4Clust.
-  The instance contains: 2219 events.
-  The cuts are: 32 sampling points long.
-  The reference time is located at position 8 within each cut (indexes start at 0).
-  The number of events of each cluster (percent of events):
-    Cluster 0: 38  (1.7%)
-    Cluster 1: 58  (2.6%)
-    Cluster 2: 243  (11.0%)
-    Cluster 3: 122  (5.5%)
-    Cluster 4: 79  (3.6%)
-    Cluster 5: 577  (26.0%)
-    Cluster 6: 396  (17.8%)
-    Cluster 7: 706  (31.8%)
-#+end_example
 
 We can then (if we are happy with the clustering) get the "waveform catalogue" needed for classification using method =catalogue=, first with the default parameters:
 
