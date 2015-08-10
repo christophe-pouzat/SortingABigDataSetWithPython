@@ -2707,7 +2707,7 @@ Evts.good_limits
 #+END_SRC
 
 #+RESULTS: Sample-good_limits-example
-| before | : | 8 | after | : | 23 |
+| after | : | 23 | before | : | 8 |
 
 We see that we get here a slightly tighter cut than we did previously with our visual setting. We then redo our cuts with these parameters:
 
@@ -2742,9 +2742,9 @@ Evts[-Evts.good_events(valley=True,upper_thr=10,lower_thr=-9),:].plot()
 #+END_SRC
 
 #+RESULTS: Sample-good_events-example
-: <matplotlib.axes._subplots.AxesSubplot object at 0x7f3cdf93ba20>
+: <matplotlib.axes._subplots.AxesSubplot object at 0x7f233ae1a3c8>
 : The MAD is displayed with an offset of: 2061.0
-: <matplotlib.axes._subplots.AxesSubplot object at 0x7f3cdf73dba8>
+: <matplotlib.axes._subplots.AxesSubplot object at 0x7f232e4e4550>
 : The MAD is displayed with an offset of: 2081.0
 
 #+NAME: Sample-good_events-example-fig
@@ -3113,9 +3113,9 @@ EvtsG.find_clusters(7)
 : Cluster  1: 281  (12.7%)
 : Cluster  2: 122  (5.5%)
 : Cluster  3: 79  (3.6%)
-: Cluster  4: 583  (26.3%)
+: Cluster  4: 577  (26.0%)
 : Cluster  5: 396  (17.8%)
-: Cluster  6: 700  (31.5%)
+: Cluster  6: 706  (31.8%)
 : Total number of events: 2219
 
 To build a plot with the events of the different clusters as we did before we call:
@@ -3147,8 +3147,8 @@ EvtsG.split_cluster(1,2)
 
 #+RESULTS: Sample4Clust-split_cluster-example
 : Number of events of each sub-cluster (percent of events) of cluster 1:
-: Sub-cluster  0: 132  (47.0%)
-: Sub-cluster  1: 149  (53.0%)
+: Sub-cluster  0: 149  (53.0%)
+: Sub-cluster  1: 132  (47.0%)
 : Total number of events: 281
 
 #+NAME: Sample4Clust-print-example1
@@ -3168,9 +3168,9 @@ An instance of Sample4Clust.
     Cluster 2: 132  (5.9%)
     Cluster 3: 122  (5.5%)
     Cluster 4: 79  (3.6%)
-    Cluster 5: 583  (26.3%)
+    Cluster 5: 577  (26.0%)
     Cluster 6: 396  (17.8%)
-    Cluster 7: 700  (31.5%)
+    Cluster 7: 706  (31.8%)
 #+end_example
 
 But a plot of the two new clusters, 1 and 2 shows that we did not obtain what we wanted since the new cluster 2 exhibits a mixture of the 2 types of events (with and without an early peak on site 1):
@@ -3215,6 +3215,9 @@ EvtsG.split_cluster(cluster2split=1,split_into=2,method='kmeans',components=my_s
 
 #+RESULTS: Sample4Clust-split_cluster-example2 
 : 
+: 
+: 
+: 
 : Number of events of each sub-cluster (percent of events) of cluster 1:
 : Sub-cluster  0: 26  (9.3%)
 : Sub-cluster  1: 255  (90.7%)
@@ -3237,9 +3240,9 @@ An instance of Sample4Clust.
     Cluster 2: 255  (11.5%)
     Cluster 3: 122  (5.5%)
     Cluster 4: 79  (3.6%)
-    Cluster 5: 583  (26.3%)
+    Cluster 5: 577  (26.0%)
     Cluster 6: 396  (17.8%)
-    Cluster 7: 700  (31.5%)
+    Cluster 7: 706  (31.8%)
 #+end_example
 
 We see that former cluster 1 has be split into new clusters 0, and 2. A plot of those shows that the two waveform differ not only by the presence or absence of an early peak on site 1, but also on the shape of their valleys on this site:
@@ -3363,11 +3366,15 @@ class Sorted:
             raise ValueError('Elements of the third column of sorting must be larger than -1000')
         if np.any(sorting[:,2] > 999):
             raise ValueError('Elements of the third column of sorting must be smaller than 1000')
-        self._MCD = MCD_instance.offset()
-        self.catalogue = catalogue.copy()
+        self.before = catalogue['before']
+        self.after = catalogue['after']
+        originalMAD = np.repeat(MCD_instance.mad,self.before+self.after+1)
+        self.catalogue = {'Cluster '+str(i):{'center':catalogue['Cluster ' + str(i)]['center'][:]/originalMAD,
+                                             'centerD':catalogue['Cluster ' + str(i)]['centerD'][:]/originalMAD,
+                                             'centerDD':catalogue['Cluster ' + str(i)]['centerDD'][:]/originalMAD}
+                          for i in range(self.nb_neurons)}
+        self._MCD = MCD_instance.normalize
         self.sorting = sorting.copy()
-        self.before = self.catalogue['before']
-        self.after = self.catalogue['after']
         self.centersM = np.array([self.catalogue['Cluster '+str(i)]["center"] for i in range(self.nb_neurons)])
     def _cut_sgl_evt(self,evt_pos):
         """Make a cut from the raw data 'centered' on evt_pos and return a vector.
@@ -3477,7 +3484,7 @@ class Sorted:
         import numpy as np
         res = np.zeros(self._MCD.data.shape)
         data_length = len(self._MCD)
-        ref_idx = np.arange(-self.catalogue['before'],self.catalogue['after'])
+        ref_idx = np.arange(-self.before,self.after)
         for i in range(self.sorting.shape[0]):
             cluster_idx = self.sorting[i,0]
             if cluster_idx != -1:
@@ -3548,13 +3555,13 @@ Sorting0.single_peel(threshold=-3,filter_length=5)
 Number of detected spikes: 2242
   Number of spikes from unit 0: 27
   Number of spikes from unit 1: 66
-  Number of spikes from unit 2: 256
-  Number of spikes from unit 3: 123
-  Number of spikes from unit 4: 70
-  Number of spikes from unit 5: 606
-  Number of spikes from unit 6: 406
-  Number of spikes from unit 7: 624
-  Number of unclassified events:64
+  Number of spikes from unit 2: 258
+  Number of spikes from unit 3: 124
+  Number of spikes from unit 4: 68
+  Number of spikes from unit 5: 605
+  Number of spikes from unit 6: 401
+  Number of spikes from unit 7: 630
+  Number of unclassified events:63
 #+end_example
 
 #+BEGIN_SRC python :session *Python* :results silent
@@ -3571,16 +3578,16 @@ Sorting0.single_peel(channels4detection=0,threshold=-3,filter_length=3)
 
 #+RESULTS:
 #+begin_example
-Number of detected spikes: 559
+Number of detected spikes: 556
   Number of spikes from unit 0: 0
   Number of spikes from unit 1: 12
   Number of spikes from unit 2: 7
-  Number of spikes from unit 3: 7
+  Number of spikes from unit 3: 6
   Number of spikes from unit 4: 2
   Number of spikes from unit 5: 136
-  Number of spikes from unit 6: 72
-  Number of spikes from unit 7: 212
-  Number of unclassified events:111
+  Number of spikes from unit 6: 73
+  Number of spikes from unit 7: 205
+  Number of unclassified events:115
 #+end_example
 
 #+BEGIN_SRC python :session *Python* :results output exports both
@@ -3589,16 +3596,16 @@ Sorting0.single_peel(channels4detection=1,threshold=-3,filter_length=3)
 
 #+RESULTS:
 #+begin_example
-Number of detected spikes: 461
-  Number of spikes from unit 0: 2
+Number of detected spikes: 456
+  Number of spikes from unit 0: 1
   Number of spikes from unit 1: 1
-  Number of spikes from unit 2: 23
+  Number of spikes from unit 2: 22
   Number of spikes from unit 3: 0
   Number of spikes from unit 4: 8
-  Number of spikes from unit 5: 114
+  Number of spikes from unit 5: 116
   Number of spikes from unit 6: 4
-  Number of spikes from unit 7: 189
-  Number of unclassified events:120
+  Number of spikes from unit 7: 188
+  Number of unclassified events:116
 #+end_example
 
 #+BEGIN_SRC python :session *Python* :results output exports both
@@ -3607,16 +3614,16 @@ Sorting0.single_peel(channels4detection=2,threshold=-3,filter_length=3)
 
 #+RESULTS:
 #+begin_example
-Number of detected spikes: 543
+Number of detected spikes: 552
   Number of spikes from unit 0: 0
   Number of spikes from unit 1: 0
   Number of spikes from unit 2: 11
   Number of spikes from unit 3: 2
   Number of spikes from unit 4: 2
-  Number of spikes from unit 5: 192
-  Number of spikes from unit 6: 12
-  Number of spikes from unit 7: 217
-  Number of unclassified events:107
+  Number of spikes from unit 5: 193
+  Number of spikes from unit 6: 7
+  Number of spikes from unit 7: 208
+  Number of unclassified events:129
 #+end_example
 
 #+BEGIN_SRC python :session *Python* :results silent

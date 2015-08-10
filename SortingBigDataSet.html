@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2015-08-09 dim. 21:19 -->
+<!-- 2015-08-10 lun. 15:39 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="viewport" content="width=device-width, initial-scale=1" />
 <title>Sorting a Big Data Set With Python</title>
@@ -3014,12 +3014,12 @@ We can also call the <code>good_limits</code> method in order to have an automat
 </colgroup>
 <tbody>
 <tr>
-<td class="org-left">before</td>
-<td class="org-left">:</td>
-<td class="org-right">8</td>
 <td class="org-left">after</td>
 <td class="org-left">:</td>
 <td class="org-right">23</td>
+<td class="org-left">before</td>
+<td class="org-left">:</td>
+<td class="org-right">8</td>
 </tr>
 </tbody>
 </table>
@@ -3455,9 +3455,9 @@ Cluster  0: 58  (2.6%)
 Cluster  1: 281  (12.7%)
 Cluster  2: 122  (5.5%)
 Cluster  3: 79  (3.6%)
-Cluster  4: 583  (26.3%)
+Cluster  4: 577  (26.0%)
 Cluster  5: 396  (17.8%)
-Cluster  6: 700  (31.5%)
+Cluster  6: 706  (31.8%)
 Total number of events: 2219
 </pre>
 
@@ -3499,8 +3499,8 @@ We can trys to split cluster 1 into 2 clusters since some events in this cluster
 
 <pre class="example">
 Number of events of each sub-cluster (percent of events) of cluster 1:
-Sub-cluster  0: 132  (47.0%)
-Sub-cluster  1: 149  (53.0%)
+Sub-cluster  0: 149  (53.0%)
+Sub-cluster  1: 132  (47.0%)
 Total number of events: 281
 </pre>
 
@@ -3521,9 +3521,9 @@ An instance of Sample4Clust.
     Cluster 2: 132  (5.9%)
     Cluster 3: 122  (5.5%)
     Cluster 4: 79  (3.6%)
-    Cluster 5: 583  (26.3%)
+    Cluster 5: 577  (26.0%)
     Cluster 6: 396  (17.8%)
-    Cluster 7: 700  (31.5%)
+    Cluster 7: 706  (31.8%)
 </pre>
 
 <p>
@@ -3579,6 +3579,9 @@ EvtsG.split_cluster(cluster2split=1,split_into=2,method='kmeans',components=my_s
 </div>
 
 <pre class="example">
+
+
+
 Number of events of each sub-cluster (percent of events) of cluster 1:
 Sub-cluster  0: 26  (9.3%)
 Sub-cluster  1: 255  (90.7%)
@@ -3602,9 +3605,9 @@ An instance of Sample4Clust.
     Cluster 2: 255  (11.5%)
     Cluster 3: 122  (5.5%)
     Cluster 4: 79  (3.6%)
-    Cluster 5: 583  (26.3%)
+    Cluster 5: 577  (26.0%)
     Cluster 6: 396  (17.8%)
-    Cluster 7: 700  (31.5%)
+    Cluster 7: 706  (31.8%)
 </pre>
 
 <p>
@@ -3753,11 +3756,15 @@ We define now our "main" class, <code>Sorted</code>. Instances of this class are
             raise ValueError('Elements of the third column of sorting must be larger than -1000')
         if np.any(sorting[:,2] &gt; 999):
             raise ValueError('Elements of the third column of sorting must be smaller than 1000')
-        self._MCD = MCD_instance.offset()
-        self.catalogue = catalogue.copy()
+        self.before = catalogue['before']
+        self.after = catalogue['after']
+        originalMAD = np.repeat(MCD_instance.mad,self.before+self.after+1)
+        self.catalogue = {'Cluster '+str(i):{'center':catalogue['Cluster ' + str(i)]['center'][:]/originalMAD,
+                                             'centerD':catalogue['Cluster ' + str(i)]['centerD'][:]/originalMAD,
+                                             'centerDD':catalogue['Cluster ' + str(i)]['centerDD'][:]/originalMAD}
+                          for i in range(self.nb_neurons)}
+        self._MCD = MCD_instance.normalize
         self.sorting = sorting.copy()
-        self.before = self.catalogue['before']
-        self.after = self.catalogue['after']
         self.centersM = np.array([self.catalogue['Cluster '+str(i)]["center"] for i in range(self.nb_neurons)])
     def _cut_sgl_evt(self,evt_pos):
         """Make a cut from the raw data 'centered' on evt_pos and return a vector.
@@ -3867,7 +3874,7 @@ We define now our "main" class, <code>Sorted</code>. Instances of this class are
         import numpy as np
         res = np.zeros(self._MCD.data.shape)
         data_length = len(self._MCD)
-        ref_idx = np.arange(-self.catalogue['before'],self.catalogue['after'])
+        ref_idx = np.arange(-self.before,self.after)
         for i in range(self.sorting.shape[0]):
             cluster_idx = self.sorting[i,0]
             if cluster_idx != -1:
@@ -4018,7 +4025,7 @@ Christophe Pouzat. (2015). PouzatDetorakisEuroScipy2014: Complet avec référenc
 </div></div>
 <div id="postamble" class="status">
 <p class="author">Author: Christophe Pouzat</p>
-<p class="date">Created: 2015-08-09 dim. 21:19</p>
+<p class="date">Created: 2015-08-10 lun. 15:39</p>
 <p class="creator">Emacs 24.5.1 (Org mode 8.2.10)</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
