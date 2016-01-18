@@ -1,0 +1,3654 @@
+#+TITLE: Sorting a Big Data Set With Python
+#+AUTHOR: Christophe Pouzat
+#+EMAIL: christophe.pouzat@parisdescartes.fr
+#+OPTIONS: ':nil *:t -:t ::t <:t H:3 \n:nil ^:t arch:headline
+#+OPTIONS: author:t c:nil creator:comment d:(not "LOGBOOK") date:t
+#+OPTIONS: e:t email:nil f:t inline:t num:t p:nil pri:nil stat:t
+#+OPTIONS: tags:t tasks:t tex:t timestamp:t toc:t todo:t |:t
+#+CREATOR: Emacs 24.5.1 (Org mode 8.2.10)
+#+DESCRIPTION:
+#+KEYWORDS:
+#+LANGUAGE: en
+#+LaTeX_HEADER: \usepackage[backend=biber,style=authoryear,citestyle=authoryear-comp,isbn=false,url=false,eprint=false,doi=false,note=false]{biblatex}
+#+LaTeX_HEADER: \usepackage{alltt}
+#+LaTeX_HEADER: \usepackage[usenames,dvipsnames]{xcolor}
+#+LaTeX_HEADER: \renewenvironment{verbatim}{\begin{alltt} \scriptsize \color{Bittersweet} \vspace{0.2cm} }{\vspace{0.2cm} \end{alltt} \normalsize \color{black}}
+#+LaTeX_HEADER: \definecolor{lightcolor}{gray}{.55}
+#+LaTeX_HEADER: \definecolor{shadecolor}{gray}{.85}
+#+LaTeX_HEADER: \usepackage{minted}
+#+LATEX_HEADER: \bibliography{SortingBigDataSet}
+#+PROPERTY: header-args:python:  :session *Python*
+
+#+NAME: emacs-set-up
+#+BEGIN_SRC emacs-lisp :results silent :exports none
+(setq py-shell-name "~/anaconda3/bin/python")
+(setq org-export-babel-evaluate nil)
+#+END_SRC
+
+#+NAME: org-latex-set-up
+#+BEGIN_SRC emacs-lisp :results silent :exports none
+(setq org-latex-listings 'minted)
+(add-to-list 'org-latex-minted-langs
+               '(R "r"))
+(add-to-list 'org-latex-minted-langs
+               '(maxima "r"))
+(setq org-latex-minted-options
+      '(("bgcolor" "shadecolor")
+	("fontsize" "\\scriptsize")))       
+(setq org-latex-pdf-process
+      '("pdflatex -shell-escape -interaction nonstopmode -output-directory %o %f"
+	"biber %b" 
+	"pdflatex -shell-escape -interaction nonstopmode -output-directory %o %f" 
+	"pdflatex -shell-escape -interaction nonstopmode -output-directory %o %f"))
+#+END_SRC
+
+* Introduction :export:
+
+The purpose of this document is to expose in a comprehensive way how the spike sorting of a "large" data set can be performed with "simple" tools built around the =Python= language. The data were recorded from a locust /Schistocerca americana/ antennal lobe (the first olfactory relay, equivalent of the /olfactory bulb/ of vertebrates). A total of 1 hour and 40 minutes of spontaneous activity was recorded as well as responses to 150 stimulation with citral. The set is publicly available on [[https://zenodo.org/record/21589][zenodo]] (DOI: [[http://dx.doi.org/10.5281/zenodo.21589][10.5281/zenodo.21589]]). The recording setting is described in Pouzat, Mazor and Laurent (2002)[fn:PouzatMazorLaurent2002] and a picture of the recording situation can be seen of the third slide of Pouzat (2014)[fn:Pouzat2014]. The purpose of these long recordings was probing interactions between neurons and how they are modified by a stimulus.
+
+There is no claim that the analysis presented in the sequel is "The" way to analyze these data; it is just one /working/ way. The motivation, as a referee, is to have an explicit example to show to authors who all too often tend to analyze their data /en bloc/. I'm advocating instead a piecemeal approach were a first stretch of data is initially used to build a model--that is, a catalog of waveform, one per neuron and per recording site--while template matching is applied to the subsequent recorded minutes using a simple trend tracking.
+
+I analyzed these data 14 years ago, meaning that I totally forgot how I did it then. I'm won't look at my old notes and give next a faithful and therefore rather long record of how I go on analyzing this kind of data.   
+
+The following analysis was performed with the [[https://store.continuum.io/cshop/anaconda/][anaconda]] distribution of =Python 3=.
+
+* Getting the data :export:
+The data are stored in [[http://www.hdfgroup.org/HDF5/][HDF5]] format on the [[https://zenodo.org/][zenodo]] server. They are all contained in a file named =locust20010201.hdf5=. The data within this file have an hierarchical organization similar to the one of a file system (one of the main ideas of the HDF5 format).
+
+The data can be downloaded with =Python= as follows:
+
+#+NAME: download-data
+#+BEGIN_SRC python :exports code :results silent :eval no-export :session *Python*
+try:
+    from urllib.request import urlretrieve # Python 3
+except ImportError:
+    from urllib import urlretrieve # Python 2
+    
+urlretrieve('https://zenodo.org/record/21589/files/locust20010201.hdf5',\
+            'locust20010201.hdf5')
+#+END_SRC
+
+Since the data are in HDF5 format, we need to load the [[http://docs.h5py.org/en/latest/][h5py]] module:
+
+#+NAME: import-h5py
+#+BEGIN_SRC python :session *Python* :results silent
+import h5py
+#+END_SRC
+
+We then open the file in read mode and we print the content of the =LabBook= attribute:
+
+#+NAME: open-locust20010201.hdf5
+#+BEGIN_SRC python :session *Python* :results output :exports both
+hdf = h5py.File('locust20010201.hdf5','r')
+print(hdf.attrs['LabBook'])
+#+END_SRC
+
+#+RESULTS: open-locust20010201.hdf5
+#+begin_example
+
+Animal: young adult female
+The data come from the second probe penetration in the right antennal lobe.
+Nice activity on tetrode 9/11/13/16 with response to citral.
+
+Continuous_1: 90 acquisitions 29 seconds long with 1 s between end and start.
+Continuous_2: 20 acquisitions 29 seconds long with 1 s between end and start. 30 MICROMETERS DEEPER TO RECOVER STRONG SIGNAL.
+Citral_1: 50 stimulations with pure citral (3 s before / 1 s citral / 25 s after) 1 s between end and start. AT THE END FEW DROPS OF SOLUTION AND PROBE MOVED 10 MICROMETERS DEEPER.
+Citral_2: 50 stimulations with pure citral (10 s before / 1 s citral / 18 s after) 1 s between end and start.
+Citral_3: 50 stimulations with pure citral (10 s before / 1 s citral / 18 s after) 1 s between end and start.
+Continuous_3: 50 acquisitions 29 seconds long with 1 s between end and start.
+Continuous_4: 50 acquisitions 29 seconds long with 1 s between end and start. THE FIRST 45 ACQUISITIONS ARE AVAILABLE THE LAST 5 HAVE BEEN LOST (CD CORRUPTION).
+#+end_example
+
+We can get the names of the different groups as follows:
+
+#+NAME: print-group-names
+#+BEGIN_SRC python :session *Python* :results output :exports both
+for name in hdf:
+    print(name)
+#+END_SRC
+
+#+RESULTS: print-group-names
+: 
+: 
+: Citral_1
+: Citral_2
+: Citral_3
+: Continuous_1
+: Continuous_2
+: Continuous_3
+: Continuous_4
+
+We can get the names of the subgroups of group =Continuous_1= with (the result is not shown because it's long):
+
+#+NAME: print-subgroup-of-Continuous_1-names
+#+BEGIN_SRC python :session *Python* :results output :exports code
+for name in hdf['Continuous_1']:
+    print(name)
+#+END_SRC
+
+#+RESULTS: print-subgroup-of-Continuous_1-names
+#+begin_example
+
+
+trial_01
+trial_02
+trial_03
+trial_04
+trial_05
+trial_06
+trial_07
+trial_08
+trial_09
+trial_10
+trial_11
+trial_12
+trial_13
+trial_14
+trial_15
+trial_16
+trial_17
+trial_18
+trial_19
+trial_20
+trial_21
+trial_22
+trial_23
+trial_24
+trial_25
+trial_26
+trial_27
+trial_28
+trial_29
+trial_30
+trial_31
+trial_32
+trial_33
+trial_34
+trial_35
+trial_36
+trial_37
+trial_38
+trial_39
+trial_40
+trial_41
+trial_42
+trial_43
+trial_44
+trial_45
+trial_46
+trial_47
+trial_48
+trial_49
+trial_50
+trial_51
+trial_52
+trial_53
+trial_54
+trial_55
+trial_56
+trial_57
+trial_58
+trial_59
+trial_60
+trial_61
+trial_62
+trial_63
+trial_64
+trial_65
+trial_66
+trial_67
+trial_68
+trial_69
+trial_70
+trial_71
+trial_72
+trial_73
+trial_74
+trial_75
+trial_76
+trial_77
+trial_78
+trial_79
+trial_80
+trial_81
+trial_82
+trial_83
+trial_84
+trial_85
+trial_86
+trial_87
+trial_88
+trial_89
+trial_90
+#+end_example
+
+The content of the =log_file_content= attribute of group =Continuous_1= is visualized with (again not shown because it's too long):
+
+#+NAME: print-log_file_content-attribute-of-Continuous_1
+#+BEGIN_SRC python :session *Python* :results output :exports code
+print(hdf['Continuous_1'].attrs['log_file_content'])
+#+END_SRC
+
+#+RESULTS: print-log_file_content-attribute-of-Continuous_1
+#+begin_example
+Experiment Parameters:
+  number of trials: 90
+  trial length: 29 sec
+  delay to odor: 3 sec
+  odor duration: 1000 msec
+  interval between start of trials: 30 sec
+  master8 channel: 8
+Continue_1 started recording: 	Thu Feb  1 16:26:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:26:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:26:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:27:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:27:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:27:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:27:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:28:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:28:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:28:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:28:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:29:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:29:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:29:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:29:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:30:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:30:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:30:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:30:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:31:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:31:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:31:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:31:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:32:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:32:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:32:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:32:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:33:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:33:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:33:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:33:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:34:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:34:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:34:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:34:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:35:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:35:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:35:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:35:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:36:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:36:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:36:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:36:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:37:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:37:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:37:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:37:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:38:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:38:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:38:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:38:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:39:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:39:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:39:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:39:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:40:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:40:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:40:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:40:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:41:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:41:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:41:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:41:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:42:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:42:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:42:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:42:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:43:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:43:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:43:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:43:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:44:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:44:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:44:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:44:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:45:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:45:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:45:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:45:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:46:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:46:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:46:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:46:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:47:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:47:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:47:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:47:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:48:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:48:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:48:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:48:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:49:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:49:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:49:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:49:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:50:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:50:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:50:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:50:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:51:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:51:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:51:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:51:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:52:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:52:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:52:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:52:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:53:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:53:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:53:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:53:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:54:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:54:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:54:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:54:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:55:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:55:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:55:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:55:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:56:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:56:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:56:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:56:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:57:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:57:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:57:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:57:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:58:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:58:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:58:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:58:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:59:10 2001
+Continue_1 started recording: 	Thu Feb  1 16:59:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 16:59:40 2001
+Continue_1 started recording: 	Thu Feb  1 16:59:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:00:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:00:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:00:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:00:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:01:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:01:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:01:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:01:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:02:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:02:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:02:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:02:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:03:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:03:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:03:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:03:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:04:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:04:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:04:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:04:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:05:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:05:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:05:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:05:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:06:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:06:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:06:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:06:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:07:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:07:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:07:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:07:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:08:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:08:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:08:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:08:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:09:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:09:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:09:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:09:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:10:10 2001
+Continue_1 started recording: 	Thu Feb  1 17:10:11 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:10:40 2001
+Continue_1 started recording: 	Thu Feb  1 17:10:41 2001
+Continue_1 stopped recording: 	Thu Feb  1 17:11:10 2001
+
+#+end_example
+
+** Getting the data set for model estimation
+
+We are going to follow the tutorial of [[https://github.com/christophe-pouzat/PouzatDetorakisEuroScipy2014][Pouzat and Detorakis (2014)]][fn:PouzatDetorakis2014] that can also be followed in [[http://xtof.perso.math.cnrs.fr/locust_sorting_python.html][HTML version]]. This means that we have to create a list of 1D arrays where each array contains the data from one recording site; we are going to do that using the first trial (=trial_1=), that is the first 29 s, of =Continuous_1=:
+
+#+NAME: assign-data-list
+#+BEGIN_SRC python :session *Python* :results silent :exports code
+ch_names = ['ch09','ch11','ch13','ch16']
+data = [hdf['Continuous_1']['trial_01'][name][...] for name in ch_names]
+#+END_SRC
+
+** An import remark on the data
+
+*The data are saved in the HDF5 file as they came out of the A/D converter on 16 bit integers*. They were band-pass filtered between 300 and 5 kHz and sampled at 15 kHz. 
+
+* Loading modules and code :export:
+
+We are going to use the usual scientific python modules and we set the interactive mode for =pyplot=:
+
+#+NAME: load-usual-modules
+#+BEGIN_SRC python :session *Python* :results silent
+import numpy as np
+import matplotlib.pyplot as plt
+plt.ion()
+import scipy
+#+END_SRC
+
+We download and then load the sorting specific codes:
+
+#+NAME: download-sorting_with_python
+#+BEGIN_SRC python :session *Python* :results silent
+urlretrieve('https://github.com/christophe-pouzat/PouzatDetorakisEuroScipy2014/raw/master/sorting_with_python.py',\
+            'sorting_with_python.py')
+#+END_SRC
+
+#+NAME: load-sorting_with_python
+#+BEGIN_SRC python :session *Python* :results silent
+import sorting_with_python as swp
+#+END_SRC
+
+* Model / Catalog Estimation :export:
+
+** Preliminary analysis
+We are going to start our analysis by some "sanity checks" to make sure that nothing "weird" happened during the recording.
+
+*** Five number summary 
+We should start by getting an overall picture of the data like the one provided by the =mquantiles= method of module =scipy.stats.mstats= using it to output a [[http://en.wikipedia.org/wiki/Five-number_summary][five-number summary]]. The five numbers are the =minimum=, the =first quartile=, the =median=, the =third quartile= and the =maximum=. Since the data were band-pass filtered between 300 and 5kHz and since they were stored "as they came out of the A/D card" *we do not expect their median value to be 0*.
+
+#+NAME: five-number-summary
+#+BEGIN_SRC python :exports both :session *Python* 
+from scipy.stats.mstats import mquantiles
+np.set_printoptions(precision=3)
+np.array([mquantiles(x,prob=[0,0.25,0.5,0.75,1]) for x in data])
+#+END_SRC
+
+#+RESULTS: five-number-summary
+|  967 | 2016 | 2057 | 2097 | 2443 |
+| 1370 | 2020 | 2057 | 2093 | 2654 |
+| 1128 | 2013 | 2059 | 2103 | 2451 |
+| 1767 | 2021 | 2057 | 2092 | 2300 |
+
+We see that they have similar but not identical inter quartile ranges: 81, 73, 90, 71 as well as similar (*for the first three*) but not identical domain "lengths": 
+
+#+NAME: Continous_1-trial_1-domain
+#+BEGIN_SRC python :exports both :session *Python* 
+[np.ptp(x) for x in data]
+#+END_SRC
+
+#+RESULTS: Continous_1-trial_1-domain
+| 1476 | 1284 | 1323 | 533 |
+
+On the fourth channel, the relatively small difference between the inter quartile range (71) and the domain length (533) suggests that much fewer large spikes should be visible than on the other channels.
+
+*** Were the data normalized?
+We can check next if some processing like a division by the /standard deviation/ (SD) has been applied:
+
+#+NAME: data-standard-deviation
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+[np.std(x) for x in data]
+#+END_SRC
+
+#+RESULTS: data-standard-deviation
+: [67.715955603137786,
+:  63.569600931328665,
+:  72.067491426766736,
+:  53.294373692202477]
+
+So no =SD= normalization was applied to these data.
+
+*** Discretization step amplitude
+We can easily obtain the size of the digitization set:
+
+#+NAME: data-discretization-step-amplitude
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+[np.min(np.diff(np.sort(np.unique(x)))) for x in data]
+#+END_SRC
+
+#+RESULTS: data-discretization-step-amplitude
+: [1, 1, 1, 1]
+
+As expected since the data are directly in the format generated by the A/D card.
+
+** Plot the data
+Plotting the data for interactive exploration is trivial. The only trick is to add (or subtract) a proper offest (that we get here using the maximal value of each channel from our five-number summary), this is automatically implemented in our =plot_data_list= function:
+
+#+NAME: make-sure-dir-img-is-here
+#+BEGIN_SRC python :results silent :exports none :session *Python*
+import os
+if not 'img' in os.listdir("."):
+    os.mkdir('img')
+
+#+END_SRC
+
+#+BEGIN_SRC python :results silent :session *Python*
+data_len = len(data[0])
+tt = np.arange(0,data_len)/1.5e4
+swp.plot_data_list(data,tt,0.1)
+plt.xlim([0,29])
+#+END_SRC
+
+The first channel is drawn as is, the second is offset downward by the sum of its maximal value and of the absolute value of the minimal value of the first, etc. We then get something like Fig. \ref{fig:WholeRawData}.
+
+#+NAME: WholeRawData
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/WholeRawData.png")
+"img/WholeRawData.png"
+#+END_SRC
+
+#+CAPTION: The whole (29 s) Locust antennal lobe data set.
+#+ATTR_LATEX: :width 1.0\textwidth
+#+NAME: fig:WholeRawData
+#+RESULTS: WholeRawData
+[[file:img/WholeRawData.png]]
+
+As already discussed, the spikes on the fourth channel (bottom trace) are really tiny. It is also good to "zoom in" and look at the data with a finer time scale (Fig. \ref{fig:First200ms}) with:
+
+#+BEGIN_SRC python :results silent :session *Python* :exports none
+swp.plot_data_list(data,tt,1)
+#+END_SRC
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.xlim([0,0.2])
+#+END_SRC
+
+#+NAME: First200ms
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/First200ms.png")
+plt.close()
+"img/First200ms.png"
+#+END_SRC
+
+#+CAPTION: First 200 ms of the Locust data set.
+#+NAME: fig:First200ms
+#+ATTR_LATEX: :width 1.0\textwidth
+#+RESULTS: First200ms
+[[file:img/First200ms.png]]
+
+We can also zoom directly in an interactive way from the first plot. Doing that, we see that there are no "big" events on =data[3]= that we cannot see on at least one of the other channels.
+
+** Data renormalization
+We are going to use a [[http://en.wikipedia.org/wiki/Median_absolute_deviation][median absolute deviation]] (=MAD=) based renormalization. The goal of the procedure is to scale the raw data such that the /noise SD/ is approximately 1. Since it is not straightforward to obtain a noise SD on data where both signal (/i.e./, spikes) and noise are present, we use this [[http://en.wikipedia.org/wiki/Robust_statistics][robust]] type of statistic for the SD:
+
+#+NAME: raw-data-mad
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+data_mad = list(map(swp.mad,data))
+data_mad
+#+END_SRC
+
+#+RESULTS: raw-data-mad
+: [59.303999999999995,
+:  54.856199999999994,
+:  66.716999999999999,
+:  53.373599999999996]
+
+And we normalize accordingly (we also subtract the =median= which is not 0):
+
+#+NAME: raw-data-median
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+data_median = list(map(np.median,data))
+data_median
+#+END_SRC
+
+#+RESULTS: raw-data-median
+: [2057.0, 2057.0, 2059.0, 2057.0]
+
+#+NAME: normalize-data
+#+BEGIN_SRC python :results silent :session *Python*
+data = list(map(lambda x: (x-np.median(x))/swp.mad(x), data))
+#+END_SRC
+
+** Detect valleys
+We are going to filter the data slightly using a "box" filter of length 5. That is, the data points of the original trace are going to be replaced by the average of themselves with their four nearest neighbors. We will then scale the filtered traces such that the =MAD= is one on each recording sites and keep only the parts of the signal which bellow -3 (I started with -4 but after doing the interactive detection check as described bellow, I decided to reduce the absolute value of the threshold):
+
+#+NAME: filter-data
+#+BEGIN_SRC python :results silent :session *Python*
+from scipy.signal import fftconvolve
+from numpy import apply_along_axis as apply 
+data_filtered = apply(lambda x:
+                      fftconvolve(x,np.array([1,1,1,1,1])/5.,'same'),
+                      1,np.array(data))
+data_filtered -= np.median(data_filtered,axis=1).reshape(len(data),1)
+data_filtered = (data_filtered.transpose() / \
+                 apply(swp.mad,1,data_filtered)).transpose()
+data_filtered[data_filtered > -3] = 0
+#+END_SRC
+
+We can see the difference between the /raw/ trace and the /filtered and rectified/ one (Fig. \ref{fig:compare-raw-and-filtered-data}) on which spikes are going to be detected with:
+
+#+BEGIN_SRC python :exports code :results silent :session *Python*
+plt.plot(tt, data[0],color='black')
+plt.axhline(y=-3,color="blue",linestyle="dashed")
+plt.plot(tt, data_filtered[0,],color='red')
+plt.xlim([0,0.2])
+plt.ylim([-20,6])
+plt.xlabel('Time (s)')
+#+END_SRC
+
+#+NAME: compare-raw-and-filtered-data
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/compare-raw-and-filtered-data.png")
+plt.close()
+"img/compare-raw-and-filtered-data.png"  
+#+END_SRC
+
+#+CAPTION: First 200 ms on site 1 of data set =data=. The raw data are shown in black, the detection threshold appears in dashed blue and the filtered and rectified trace on which spike detection is going to be preformed appears in red. 
+#+NAME: fig:compare-raw-and-filtered-data
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS: compare-raw-and-filtered-data
+[[file:img/compare-raw-and-filtered-data.png]]
+
+We now use function =peak= on the sum of the rows of our filtered and rectified version of the data:
+
+#+NAME: sp0
+#+BEGIN_SRC python :results silent :session *Python*
+sp0 = swp.peak(-data_filtered.sum(0))
+#+END_SRC
+
+Giving src_python[:results pp :session *Python*]{len(sp0)} =2325= spikes, a mean inter-event interval of src_python[:results pp :session *Python*]{round(np.mean(np.diff(sp0)))} =186.0= sampling points, a standard deviation of src_python[:results pp :session *Python*]{round(np.std(np.diff(sp0)))} =187.0= sampling points, a smallest inter-event interval of src_python[:results pp :session *Python*]{np.min(np.diff(sp0))} =16= sampling points and a largest of src_python[:results pp :session *Python*]{np.max(np.diff(sp0))} =2145= sampling points.
+
+*** Interactive spike detection check
+We can then check the detection quality with:
+
+#+BEGIN_SRC python :results silent :eval no-export :session *Python*
+swp.plot_data_list_and_detection(data,tt,sp0)
+plt.xlim([0,0.2])
+#+END_SRC
+
+#+NAME: compare-raw-data-and-detected-spikes
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/compare-raw-data-and-detected-spikes.png")
+plt.close()
+"img/compare-raw-data-and-detected-spikes.png"  
+#+END_SRC
+
+#+CAPTION: First 200 ms of data set =data= (black) with detected spikes (red). 
+#+NAME: fig:compare-raw-data-and-detected-spikes
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS: compare-raw-data-and-detected-spikes
+[[file:img/compare-raw-data-and-detected-spikes.png]]
+
+** Cuts
+After detecting our spikes, we must make our cuts in order to create our events' sample. The obvious question we must first address is: How long should our cuts be? The pragmatic way to get an answer is:
++ Make cuts much longer than what we think is necessary, like 50 sampling points on both sides of the detected event's time.
++ Compute robust estimates of the "central" event (with the =median=) and of the dispersion of the sample around this central event (with the =MAD=).
++ Plot the two together and check when does the =MAD= trace reach the background noise level (at 1 since we have normalized the data).
++ Having the central event allows us to see if it outlasts significantly the region where the =MAD= is above the background noise level.
+
+Clearly cutting beyond the time at which the =MAD= hits back the noise level should not bring any useful information as far a classifying the spikes is concerned. So here we perform this task as follows:
+
+#+BEGIN_SRC python :results silent :session *Python*
+evts = swp.mk_events(sp0,np.array(data),49,50)
+evts_median=apply(np.median,0,evts)
+evts_mad=apply(swp.mad,0,evts)
+#+END_SRC
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.plot(evts_median, color='red', lw=2)
+plt.axhline(y=0, color='black')
+for i in np.arange(0,400,100): 
+    plt.axvline(x=i, color='black', lw=2)
+
+for i in np.arange(0,400,10): 
+    plt.axvline(x=i, color='grey')
+
+plt.plot(evts_median, color='red', lw=2)
+plt.plot(evts_mad, color='blue', lw=2)
+#+END_SRC
+
+#+NAME: check-MAD-on-long-cuts
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/check-MAD-on-long-cuts.png")
+plt.close()
+'img/check-MAD-on-long-cuts.png'  
+#+END_SRC
+
+#+CAPTION: Robust estimates of the central event (red) and of the sample's dispersion around the central event (blue) obtained with "long" (100 sampling points) cuts. We see clearly that the dispersion is back to noise level 10 points before the peak and 30 points after the peak. We also see that =data[3]= brings very little information (its MAD is essentially flat).
+#+NAME: fig:check-MAD-on-long-cuts
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS: check-MAD-on-long-cuts
+[[file:img/check-MAD-on-long-cuts.png]]
+
+Fig. \ref{fig:check-MAD-on-long-cuts} clearly shows that starting the cuts 10 points before the peak and ending them 30 points after should fulfill our goals. We also see that the central event slightly outlasts the window where the =MAD= is larger than 1 and that =data[3]= brings very little information.
+
+*** Events
+Once we are satisfied with our spike detection, at least in a provisory way, and that we have decided on the length of our cuts, we proceed by making =cuts= around the detected events. :
+
+#+NAME: evts
+#+BEGIN_SRC python :exports code :results silent :session *Python*
+evts = swp.mk_events(sp0,np.array(data),9,30)
+#+END_SRC
+
+We can visualize the first 200 events with:
+
+#+BEGIN_SRC python :results silent :session *Python*
+swp.plot_events(evts,200)
+#+END_SRC
+ 
+#+name: first-200-of-evts
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/first-200-of-evts.png")
+plt.close()
+'img/first-200-of-evts.png'  
+#+END_SRC
+
+#+CAPTION: First 200 events of =evts=. Cuts from the four recording sites appear one after the other. The background (white / grey) changes with the site. In red, /robust/ estimate of the "central" event obtained by computing the pointwise median. In blue, /robust/ estimate of the scale (SD) obtained by computing the pointwise =MAD=. 
+#+LABEL: fig:first-200-of-evts
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS: first-200-of-evts
+[[file:img/first-200-of-evts.png]]
+
+*** Noise
+Getting an estimate of the noise statistical properties is an essential ingredient to build respectable goodness of fit tests. In our approach "noise events" are essentially anything that is not an "event" is the sense of the previous section. I wrote essentially and not exactly since there is a little twist here which is the minimal distance we are willing to accept between the reference time of a noise event and the reference time of the last preceding and of the first following "event". We could think that keeping a cut length on each side would be enough. That would indeed be the case if /all/ events were starting from and returning to zero within a cut. But this is not the case with the cuts parameters we chose previously (that will become clear soon). You might wonder why we chose so short a cut length then. Simply to avoid having to deal with too many superposed events which are the really bothering events for anyone wanting to do proper sorting. 
+To obtain our noise events we are going to use function =mk_noise= which takes the /same/ arguments as function =mk_events= plus two numbers: 
++ =safety_factor= a number by which the cut length is multiplied and which sets the minimal distance between the reference times discussed in the previous paragraph.
++ =size= the maximal number of noise events one wants to cut (the actual number obtained might be smaller depending on the data length, the cut length, the safety factor and the number of events).
+
+We cut noise events with a rather large safety factor:
+
+#+NAME: noise
+#+BEGIN_SRC python :exports code :results silent :session *Python*
+noise = swp.mk_noise(sp0,np.array(data),10,30,safety_factor=2.5,size=2000)
+#+END_SRC
+
+Calling (result not shown):
+
+#+BEGIN_SRC python :exports code :results silent :session *Python* :eval never
+swp.plot_events(noise,200)
+#+END_SRC
+
+shows that our "safety factor" was large enough.
+
+*** Getting "clean" events
+Our spike sorting has two main stages, the first one consist in estimating a *model* and the second one consists in using this model to *classify* the data. Our *model* is going to be built out of reasonably "clean" events. Here by clean we mean events which are not due to a nearly simultaneous firing of two or more neurons; and simultaneity is defined on the time scale of one of our cuts. When the model will be subsequently used to classify data, events are going to decomposed into their (putative) constituent when they are not "clean", that is, *superposition are going to be looked and accounted for*. 
+
+In order to eliminate the most obvious superpositions we are going to use a rather brute force approach, looking at the sides of the central peak of our median event and checking if individual events are not too large there, that is do not exhibit extra peaks. We first define a function doing this job:
+
+#+NAME: good_evts_fct
+#+BEGIN_SRC python :exports code :results silent :session *Python*
+def good_evts_fct(samp, thr=3):
+    samp_med = apply(np.median,0,samp)
+    samp_mad = apply(swp.mad,0,samp)
+    above = samp_med > 0
+    samp_r = samp.copy()
+    for i in range(samp.shape[0]): samp_r[i,above] = 0
+    samp_med[above] = 0
+    res = apply(lambda x:
+                np.all(abs((x-samp_med)/samp_mad) < thr),
+                1,samp_r)
+    return res
+
+#+END_SRC
+
+We then apply our new function to our sample using a threshold of 9 (after a try with 8):
+
+#+NAME: goodEvts
+#+BEGIN_SRC python :exports code :results silent :session *Python*
+goodEvts = good_evts_fct(evts,9)
+#+END_SRC
+
+Out of src_python[:results pp :session *Python*]{len(goodEvts)} =2325= events we get src_python[:results pp :session *Python*]{sum(goodEvts)} =2314= "good" ones. As usual, the first 200 good ones can be visualized with:
+
+#+BEGIN_SRC python :eval no-export :results silent :session *Python*
+swp.plot_events(evts[goodEvts,:][:200,:]) 
+#+END_SRC 
+
+while the bad guys can be visualized with:
+
+#+BEGIN_SRC python :eval no-export :results silent :session *Python*
+swp.plot_events(evts[goodEvts.__neg__(),:],
+                show_median=False,
+                show_mad=False)
+#+END_SRC
+
+We see that these events are not superpositions and we will work with the whole sample.
+
+** Dimension reduction
+
+*** Principal Component Analysis (PCA)
+Our events are living right now in an 160 dimensional space (our cuts are 40 sampling points long and we are working with 4 recording sites simultaneously). It turns out that it hard for most humans to perceive structures in such spaces. It also hard, not to say impossible with a realistic sample size, to estimate probability densities (which is what model based clustering algorithms are actually doing) in such spaces, unless one is ready to make strong assumptions about these densities. It is therefore usually a good practice to try to reduce the dimension of the [[http://en.wikipedia.org/wiki/Sample_space][sample space]] used to represent the data. We are going to that with [[http://en.wikipedia.org/wiki/Principal_component_analysis][principal component analysis]] (=PCA=), using it on our "good" events. 
+
+#+NAME: PCA
+#+BEGIN_SRC python :exports code :results silent :session *Python*
+from numpy.linalg import svd
+varcovmat = np.cov(evts.T)
+u, s, v = svd(varcovmat)
+#+END_SRC
+
+With this "back to the roots" approach, =u= should be an orthonormal matrix whose column are made of the =principal components= (and =v= should be the transpose of =u= since our matrix =varcovmat= is symmetric and real by construction). =s= is a vector containing the amount of sample variance explained by each principal component.
+
+*** Exploring =PCA= results
+=PCA= is a rather abstract procedure to most of its users, at least when they start using it. But one way to grasp what it does is to plot the =mean event= plus or minus, say five times, each principal components like:
+
+#+BEGIN_SRC python :session *Python*  :exports code :results silent :session *Python*
+evt_idx = range(160)
+evts_good_mean = np.mean(evts,0)
+for i in range(4):
+    plt.subplot(2,2,i+1)
+    plt.plot(evt_idx,evts_good_mean, 'black',evt_idx,
+             evts_good_mean + 5 * u[:,i],
+             'red',evt_idx,evts_good_mean - 5 * u[:,i], 'blue')
+    plt.title('PC' + str(i) + ': ' + str(round(s[i]/sum(s)*100)) +'%')
+
+#+END_SRC
+
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/explore-evts-PC0to3.png")
+plt.close()
+"img/explore-evts-PC0to3.png"  
+#+END_SRC
+
+#+CAPTION: PCA of =evts= exploration (PC 1 to 4). Each of the 4 graphs shows the mean waveform (black), the mean waveform + 5 x PC (red), the mean - 5 x PC (blue) for each of the first 4 PCs. The fraction of the total variance "explained" by the component appears in the title of each graph.
+#+NAME: fig:explore-evts-PC0to3
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/explore-evts-PC0to3.png]]
+
+We now look at the next 4 principal components:
+
+#+BEGIN_SRC python  :exports code :results silent :session *Python*
+for i in range(4,8):
+    plt.subplot(2,2,i-3)
+    plt.plot(evt_idx,evts_good_mean, 'black',
+             evt_idx,evts_good_mean + 5 * u[:,i], 'red',
+             evt_idx,evts_good_mean - 5 * u[:,i], 'blue')
+    plt.title('PC' + str(i) + ': ' + str(round(s[i]/sum(s)*100)) +'%')
+
+#+END_SRC
+
+#+BEGIN_SRC python  :exports results :results file :session *Python*
+plt.savefig("img/explore-evts-PC4to7.png")
+plt.close()
+"img/explore-evts-PC4to7.png"  
+#+END_SRC
+
+#+CAPTION: PCA of =evts= exploration (PC 4 to 7). Each of the 4 graphs shows the mean waveform (black), the mean waveform + 5 x PC (red), the mean - 5 x PC (blue). The fraction of the total variance "explained" by the component appears in between parenthesis in the title of each graph. 
+#+NAME: fig:explore-evts-PC4to7
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/explore-evts-PC4to7.png]]
+
+*** Static representation of the projected data
+We can build a =scatter plot matrix= showing the projections of our "good" events sample onto the plane defined by pairs of the few first PCs:
+
+#+NAME: scatter-plot-matrix-on-PC
+#+BEGIN_SRC python  :exports code :results silent :session *Python*
+evts_good_P0_to_P3 = np.dot(evts,u[:,0:4])
+from pandas.tools.plotting import scatter_matrix
+import pandas as pd
+df = pd.DataFrame(evts_good_P0_to_P3)
+scatter_matrix(df,alpha=0.2,s=4,c='k',figsize=(6,6),
+               diagonal='kde',marker=".")
+ 
+#+END_SRC
+
+#+NAME: scatter-plot-matrix-on-PC-b
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig('img/scatter-plot-matrix-on-PC.png')
+plt.close()
+'img/scatter-plot-matrix-on-PC.png'
+#+END_SRC
+
+#+RESULTS: scatter-plot-matrix-on-PC-b
+[[file:img/scatter-plot-matrix-on-PC.png]]
+
+*** Dynamic visualization of the data with =GGobi=
+The best way to discern structures in "high dimensional" data is to dynamically visualize them. To this end, the tool of choice is [[http://www.ggobi.org/][GGobi]], an open source software available on =Linux=, =Windows= and =MacOS=. We start by exporting our data in =csv= format to our disk:
+
+#+NAME: ToGGobi1
+#+BEGIN_SRC python :results silent :session *Python*
+import csv
+g = open('evts.csv','w')
+w = csv.writer(g)
+w.writerows(np.dot(evts,u[:,:6]))
+g.close()
+#+END_SRC
+
+The following terse procedure should allow the reader to get going with =GGobi=:
++ Launch =GGobi=
++ In menu: =File= -> =Open=, select =evtsE.csv=.
++ Since the glyphs are rather large, start by changing them for smaller ones:
+ - Go to menu: =Interaction= -> =Brush=.
+ - On the Brush panel which appeared check the =Persistent= box.
+ - Click on =Choose color & glyph...=.
+ - On the chooser which pops out, click on the small dot on the upper left of the left panel.
+ - Go back to the window with the data points.
+ - Right click on the lower right corner of the rectangle which appeared on the figure after you selected =Brush=.
+ - Dragg the rectangle corner in order to cover the whole set of points.
+ - Go back to the =Interaction= menu and select the first row to go back where you were at the start.
++ Select menu: =View= -> =Rotation=.
++ Adjust the speed of the rotation in order to see things properly.
+
+We easily discern 7 rather well separated clusters. Meaning that an automatic clustering with 7 clusters on the first 3 or 4 principal components should do the job.
+
+** Clustering with K-Means
+Since our dynamic visualization shows 7 well separated clusters in 3 dimensions, a simple [[http://en.wikipedia.org/wiki/K-means_clustering][k-means]] is worth trying (even if some clusters look a bit "elongated"). We are using here the [[http://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html#sklearn.cluster.KMeans][KMeans]] class of [[http://scikit-learn.org/stable/index.html][scikit-learn]]: 
+
+#+NAME: KMEANS
+#+BEGIN_SRC python :results silent :session *Python*
+from sklearn.cluster import KMeans
+km7 = KMeans(n_clusters=7, init='k-means++', n_init=100, max_iter=100)
+km7.fit(np.dot(evts,u[:,0:3]))
+c7 = km7.fit_predict(np.dot(evts,u[:,0:3]))
+#+END_SRC
+
+In order to facilitate comparison when models with different numbers of clusters or when different models are used, clusters are sorted by "size". The size is defined here as the sum of the absolute value of the median of the cluster (an L1 norm):
+
+#+NAME: c7b
+#+BEGIN_SRC python :results silent :session *Python*
+cluster_median = list([(i,
+                        np.apply_along_axis(np.median,0,
+                                            evts[c7 == i,:]))
+                                            for i in range(7)
+                                            if sum(c7 == i) > 0])
+cluster_size = list([np.sum(np.abs(x[1])) for x in cluster_median])
+new_order = list(reversed(np.argsort(cluster_size)))
+new_order_reverse = sorted(range(len(new_order)), key=new_order.__getitem__)
+c7b = [new_order_reverse[i] for i in c7]
+#+END_SRC
+
+*** Cluster specific plots
+Looking at the first 4 clusters we get Fig. \ref{fig:events-clusters0to3} with:
+
+#+BEGIN_SRC python :results silent :session *Python* 
+plt.subplot(411)
+swp.plot_events(evts[np.array(c7b) == 0,:])
+plt.ylim([-20,15])
+plt.subplot(412)
+swp.plot_events(evts[np.array(c7b) == 1,:])
+plt.ylim([-20,15])
+plt.subplot(413)
+swp.plot_events(evts[np.array(c7b) == 2,:])
+plt.ylim([-20,15])
+plt.subplot(414)
+swp.plot_events(evts[np.array(c7b) == 3,:])
+plt.ylim([-20,15])
+#+END_SRC
+
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig('img/events-clusters0to3.png')
+plt.close()
+'img/events-clusters0to3.png'
+#+END_SRC
+
+#+CAPTION: First 4 clusters. Cluster 0 at the top, cluster 4 at the bottom. Red, cluster specific central / median event. Blue, cluster specific =MAD=. 
+#+NAME: fig:events-clusters0to3
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/events-clusters0to3.png]]
+
+Here the second cluster seems to be made of two units. Looking at the last 3 clusters we get Fig. \ref{fig:events-clusters5to9} with:
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.subplot(311)
+swp.plot_events(evts[np.array(c7b) == 4,:])
+plt.ylim([-10,5])
+plt.subplot(312)
+swp.plot_events(evts[np.array(c7b) == 5,:])
+plt.ylim([-10,5])
+plt.subplot(313)
+swp.plot_events(evts[np.array(c7b) == 6,:])
+plt.ylim([-10,5])
+#+END_SRC
+
+#+BEGIN_SRC python :session *Python* :exports results :results file :session *Python*
+plt.savefig('img/events-clusters4to6.png')
+plt.close()
+'img/events-clusters4to6.png'
+#+END_SRC
+
+#+CAPTION: Last 3 clusters. Cluster 4 at the top, cluster 6 at the bottom. Red, cluster specific central / median event. Blue, cluster specific =MAD=. Notice the change in ordinate scale compared to the previous figure.
+#+NAME: fig:events-clusters4to6
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/events-clusters4to6.png]]
+
+The top (cluster 4) and bottom (cluster 6) clusters look similar.
+
+*** Results inspection with =GGobi=
+
+We start by checking our clustering quality with =GGobi=. To this end we export the data and the labels of each event:
+
+#+NAME: ToGGobi2
+#+BEGIN_SRC python :results silent :session *Python*
+g = open('evts_sorted.csv','w')
+w = csv.writer(g)
+w.writerows(np.concatenate((np.dot(evts,u[:,:6]),
+                            np.array([c7b]).T),
+                            axis=1))
+g.close()
+#+END_SRC
+
+An again succinct description of how to do the dynamical visual check is:
++ Load the new data into GGobi like before.
++ In menu: =Display= -> =New Scatterplot Display=, select =evtsEsorted.csv=.
++ Change the glyphs like before.
++ In menu: =Tools= -> =Color Schemes=, select a scheme with 10 colors, like =Spectral=, =Spectral 10=.
++ In menu: =Tools= -> =Automatic Brushing=, select =evtsEsorted.csv= tab and, within this tab, select variable =c10b=. Then click on =Apply=.
++ Select =View= -> =Rotation= like before and see your result. 
+
+We see on this dynamic display that clusters 4 and 6 do form a continuum. 
+
+*** Preliminary conclusion
+
+At this stage it seems reasonable to split cluster 1 in two and to fuse clusters 4 and 6. 
+
+*** Splitting cluster 1 in two
+
+#+NAME: KMEANS-on-cluster-1
+#+BEGIN_SRC python :results silent :session *Python*
+km2 = KMeans(n_clusters=2, init='k-means++', n_init=100, max_iter=100)
+km2.fit(np.dot(evts[np.array(c7b) == 1,:],u[:,0:3]))
+c2 = km2.fit_predict(np.dot(evts[np.array(c7b) == 1,:],u[:,0:3]))
+cluster_median2 = list([(i,
+                         np.apply_along_axis(np.median,0,
+                                             evts[np.array(c7b) == 1,:][c2 == i,:]))
+                                             for i in range(2)
+                        if sum(c2 == i) > 0])
+cluster_size2 = list([np.sum(np.abs(x[1])) for x in cluster_median2])
+new_order2 = list(reversed(np.argsort(cluster_size2)))
+new_order_reverse2 = sorted(range(len(new_order2)), key=new_order2.__getitem__)
+c2b = [new_order_reverse2[i] for i in c2]
+#+END_SRC
+  
+A look at the results:
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.subplot(211)
+swp.plot_events(evts[np.array(c7b) == 1,:][np.array(c2b) == 0,:])
+plt.ylim([-20,15])
+plt.subplot(212)
+swp.plot_events(evts[np.array(c7b) == 1,:][np.array(c2b) == 1,:])
+plt.ylim([-20,15])
+#+END_SRC
+
+#+BEGIN_SRC python :session *Python* :exports results :results file :session *Python*
+plt.savefig('img/events-cluster1split.png')
+plt.close()
+'img/events-cluster1split.png'
+#+END_SRC
+
+#+CAPTION: The results of splitting cluster 1 in two clusters with kmeans.
+#+NAME: fig:events-cluster1split
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/events-cluster1split.png]]
+
+This is not what was wanted, the events with an early large positive values on the second site are still mixed. Let's try with a gaussian mixture:
+
+#+BEGIN_SRC python :results silent :session *Python*
+from sklearn import mixture
+g2 = mixture.GMM(n_components=2,covariance_type='full',n_init=10)
+g2.fit(np.dot(evts[np.array(c7b) == 1,:],u[:,0:3]))
+cB = g2.predict(np.dot(evts[np.array(c7b) == 1,:],u[:,0:3]))
+cluster_medianB = list([(i,
+                         np.apply_along_axis(np.median,0,
+                                             evts[np.array(c7b) == 1,:][cB == i,:]))
+                                             for i in range(2)
+                        if sum(cB == i) > 0])
+cluster_sizeB = list([np.sum(np.abs(x[1])) for x in cluster_medianB])
+new_orderB = list(reversed(np.argsort(cluster_sizeB)))
+new_order_reverseB = sorted(range(len(new_orderB)), key=new_orderB.__getitem__)
+cBb = [new_order_reverseB[i] for i in cB]
+#+END_SRC
+
+A look at the results:
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.subplot(211)
+swp.plot_events(evts[np.array(c7b) == 1,:][np.array(cBb) == 0,:])
+plt.ylim([-20,15])
+plt.subplot(212)
+swp.plot_events(evts[np.array(c7b) == 1,:][np.array(cBb) == 1,:])
+plt.ylim([-20,15])
+#+END_SRC
+
+#+BEGIN_SRC python :session *Python* :exports results :results file
+plt.savefig('img/events-cluster1splitGMM.png')
+plt.close()
+'img/events-cluster1splitGMM.png'
+#+END_SRC
+
+#+CAPTION: The results of splitting cluster 1 in two clusters with a GMM.
+#+NAME: fig:events-cluster1splitGMM
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/events-cluster1splitGMM.png]]
+
+This does what we wanted. That also suggests that redoing our initial clustering with a GMM is worth trying (and it was tried, not shown, but did not work out better).
+
+*** Construction of a labeling with 8 units
+
+We will go further from this point by splitting the second cluster in two as we just did. The eighth cluster is going to be the less numerous of the two we just obtained.
+
+#+NAME: labeling-with-8
+#+BEGIN_SRC python :session *Python* :results silent
+c8 = c7b.copy()
+B_idx = 0
+for idx in range(len(c8)):
+    if c8[idx] == 1:
+        if cBb[B_idx] == 0:
+            c8[idx] = 7
+        B_idx += 1
+
+#+END_SRC 
+
+** Clustering with a Gaussian Mixture Model (GMM) :noexport:
+
+#+NAME: GMM-clustering
+#+BEGIN_SRC python :results silent :session *Python*
+g7 = mixture.GMM(n_components=7,covariance_type='full',n_init=10)
+g7.fit(np.dot(evts,u[:,0:3]))
+c7B = g7.predict(np.dot(evts,u[:,0:3]))
+cluster_medianB = list([(i,
+                         np.apply_along_axis(np.median,0,
+                                             evts[c7B == i,:]))
+                                             for i in range(7)
+                        if sum(c7B == i) > 0])
+cluster_sizeB = list([np.sum(np.abs(x[1])) for x in cluster_medianB])
+new_orderB = list(reversed(np.argsort(cluster_sizeB)))
+new_order_reverseB = sorted(range(len(new_orderB)), key=new_orderB.__getitem__)
+c7Bb = [new_order_reverseB[i] for i in c7B]
+#+END_SRC
+ 
+*** Cluster specific plots
+Looking at the first 4 clusters we get Fig. \ref{fig:events-clusters0to3GMM} with:
+
+#+BEGIN_SRC python :results silent :session *Python* 
+plt.subplot(411)
+swp.plot_events(evts[np.array(c7Bb) == 0,:])
+plt.ylim([-20,15])
+plt.subplot(412)
+swp.plot_events(evts[np.array(c7Bb) == 1,:])
+plt.ylim([-20,15])
+plt.subplot(413)
+swp.plot_events(evts[np.array(c7Bb) == 2,:])
+plt.ylim([-20,15])
+plt.subplot(414)
+swp.plot_events(evts[np.array(c7Bb) == 3,:])
+plt.ylim([-20,15])
+#+END_SRC
+
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig('img/events-clusters0to3GMM.png')
+plt.close()
+'img/events-clusters0to3GMM.png'
+#+END_SRC
+
+#+CAPTION: First 4 clusters obtained with a GMM. Cluster 0 at the top, cluster 4 at the bottom. Red, cluster specific central / median event. Blue, cluster specific =MAD=. 
+#+NAME: fig:events-clusters0to3GMM
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/events-clusters0to3GMM.png]]
+
+Looking at the last 3 clusters we get Fig. \ref{fig:events-clusters4to6GMM} with:
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.subplot(311)
+swp.plot_events(evts[np.array(c7Bb) == 4,:])
+plt.ylim([-20,15])
+plt.subplot(312)
+swp.plot_events(evts[np.array(c7Bb) == 5,:])
+plt.ylim([-20,15])
+plt.subplot(313)
+swp.plot_events(evts[np.array(c7Bb) == 6,:])
+plt.ylim([-20,15])
+#+END_SRC
+
+#+BEGIN_SRC python :session *Python* :exports results :results file :session *Python*
+plt.savefig('img/events-clusters4to6GMM.png')
+plt.close()
+'img/events-clusters4to6GMM.png'
+#+END_SRC
+
+#+CAPTION: Last 3 clusters obtained with a GMM. Cluster 4 at the top, cluster 6 at the bottom. Red, cluster specific central / median event. Blue, cluster specific =MAD=. Notice the change in ordinate scale compared to the previous figure.
+#+NAME: fig:events-clusters4to6GMM
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/events-clusters4to6GMM.png]]
+
+#+NAME: GMM-clustering-8
+#+BEGIN_SRC python :results silent :session *Python*
+g8 = mixture.GMM(n_components=8,covariance_type='full',n_init=10)
+g8.fit(np.dot(evts,u[:,0:3]))
+c8 = g8.predict(np.dot(evts,u[:,0:3]))
+cluster_median8 = list([(i,
+                         np.apply_along_axis(np.median,0,
+                                             evts[c8 == i,:]))
+                                             for i in range(8)
+                        if sum(c8 == i) > 0])
+cluster_size8 = list([np.sum(np.abs(x[1])) for x in cluster_median8])
+new_order8 = list(reversed(np.argsort(cluster_size8)))
+new_order_reverse8 = sorted(range(len(new_order8)), key=new_order8.__getitem__)
+c8b = [new_order_reverse8[i] for i in c8]
+#+END_SRC
+
+#+BEGIN_SRC python :results silent :session *Python* 
+plt.subplot(411)
+swp.plot_events(evts[np.array(c8b) == 0,:])
+plt.ylim([-20,15])
+plt.subplot(412)
+swp.plot_events(evts[np.array(c8b) == 1,:])
+plt.ylim([-20,15])
+plt.subplot(413)
+swp.plot_events(evts[np.array(c8b) == 2,:])
+plt.ylim([-20,15])
+plt.subplot(414)
+swp.plot_events(evts[np.array(c8b) == 3,:])
+plt.ylim([-20,15])
+#+END_SRC
+
+#+BEGIN_SRC python :results silent :session *Python* 
+plt.subplot(411)
+swp.plot_events(evts[np.array(c8b) == 4,:])
+plt.ylim([-20,15])
+plt.subplot(412)
+swp.plot_events(evts[np.array(c8b) == 5,:])
+plt.ylim([-20,15])
+plt.subplot(413)
+swp.plot_events(evts[np.array(c8b) == 6,:])
+plt.ylim([-20,15])
+plt.subplot(414)
+swp.plot_events(evts[np.array(c8b) == 7,:])
+plt.ylim([-20,15])
+#+END_SRC
+
+
+** Spike "peeling": a "Brute force" superposition resolution :export:
+We are going to resolve (the most "obvious") superpositions by a "recursive peeling method":
+1. Events are detected and cut from the raw data /or from an already peeled version of the data/.
+2. The closest center (in term of Euclidean distance) to the event is found.
+3. If the residual sum of squares (=RSS=), that is: (actual data - best center)$^2$, is smaller than the squared norm of a cut, the best center is subtracted from the data on which detection was performed---jitter is again compensated for at this stage.
+4. Go back to step 1 or stop. 
+
+To apply this procedure, we need, for each cluster, estimates of its center and of its first two derivatives. Function =mk_center_dictionary= does the job for us. We must moreover build our clusters' centers such that they can be used for subtraction, /this implies that we should make them long enough, on both side of the peak, to see them go back to baseline/. Formal parameters =before= and =after= bellow should therefore be set to larger values than the ones used for clustering: 
+
+#+NAME: centers
+#+BEGIN_SRC python :results silent :session *Python*
+centers = { "Cluster " + str(i) :
+            swp.mk_center_dictionary(sp0[np.array(c8)==i],
+                                     np.array(data))
+            for i in range(8)}
+#+END_SRC
+
+*** First peeling :export:
+Function =classify_and_align_evt= is used next. For each detected event, it matches the closest template, correcting for the jitter, if the closest template is close enough:
+
+#+BEGIN_SRC python :results pp :exports both :session *Python*
+swp.classify_and_align_evt(sp0[0],np.array(data),centers)
+#+END_SRC
+
+#+RESULTS:
+: ['Cluster 4', 41, -0.76918445702167082]
+
+We can use the function on every detected event. A trick here is to store the matrix version of the data in order to avoid the conversion of the list of vectors (making the data of the different channels) into a matrix for each detected event:
+
+#+NAME: round0
+#+BEGIN_SRC python :results silent :session *Python*
+data0 = np.array(data) 
+round0 = [swp.classify_and_align_evt(sp0[i],data0,centers)
+          for i in range(len(sp0))]
+#+END_SRC
+
+We can check how many events got unclassified on a total of src_python[:results pp :session *Python*]{len(sp0)} =2325=:
+
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+len([x[1] for x in round0 if x[0] == '?'])
+#+END_SRC
+
+#+RESULTS:
+: 56
+
+Using function =predict_data=, we create an ideal data trace given events' positions, events' origins and a clusters' catalog:
+
+#+NAME: pred0
+#+BEGIN_SRC python :results silent :session *Python*
+pred0 = swp.predict_data(round0,centers,data0.shape[0],data0.shape[1])
+#+END_SRC
+
+#+NAME: data1
+#+BEGIN_SRC python :results silent :session *Python*
+data1 = data0 - pred0
+#+END_SRC
+
+We can compare the original data with the result of the "first peeling" to get Fig. \ref{fig:FirstPeeling}:
+
+#+BEGIN_SRC python :results silent :session *Python* 
+plt.plot(tt, data0[0,], color='black')
+plt.plot(tt, data1[0,], color='red',lw=0.7)
+plt.plot(tt, data0[1,]-20, color='black')
+plt.plot(tt, data1[1,]-20, color='red',lw=0.7)
+plt.plot(tt, data0[2,]-40, color='black')
+plt.plot(tt, data1[2,]-40, color='red',lw=0.7)
+plt.plot(tt, data0[3,]-60, color='black')
+plt.plot(tt, data1[3,]-60, color='red',lw=0.7)
+plt.xlabel('Time (s)')
+plt.xlim([2.45,2.55])
+#+END_SRC
+
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/FirstPeeling.png")
+plt.close()
+"img/FirstPeeling.png"
+#+END_SRC
+
+#+CAPTION: 100 ms of data. Black, original data; red, after first peeling.
+#+NAME: fig:FirstPeeling
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/FirstPeeling.png]]
+
+*** Second peeling :export:
+We then take =data1= as our former =data0= and we repeat the procedure. We do it with slight modifications: detection is done on a single recording site and a shorter filter length is used before detecting the events. Doing detection on a single site (here site 0) allows us to correct some drawbacks of our crude spike detection method. When we used it the first time we summed the filtered and rectified versions of the data before looking at peaks. This summation can lead to badly defined spike times when two neurons that are large on different recording sites, say site 0 and site 1 fire at nearly the same time. The summed event can then have a peak in between the two true peaks and our jitter correction cannot resolve that. We are therefore going to perform detection on the different sites. The jitter estimation and the subtraction are always going to be done on the 4 recording sites:
+
+#+NAME: sp1
+#+BEGIN_SRC python :results silent :session *Python*
+data_filtered = np.apply_along_axis(lambda x:
+                                    fftconvolve(x,np.array([1,1,1])/3.,
+                                                'same'),
+                                    1,data1)
+data_filtered = (data_filtered.transpose() /
+                 np.apply_along_axis(swp.mad,1,
+                                     data_filtered)).transpose()
+data_filtered[data_filtered > -3] = 0
+sp1 = swp.peak(-data_filtered[0,:])
+#+END_SRC
+
+We classify the events and obtain the new prediction and the new "data":
+
+#+NAME: round1-pred1-data2
+#+BEGIN_SRC python :results silent :session *Python*
+round1 = [swp.classify_and_align_evt(sp1[i],data1,centers)
+          for i in range(len(sp1))]
+pred1 = swp.predict_data(round1,centers,data1.shape[0],data1.shape[1])
+data2 = data1 - pred1
+#+END_SRC
+
+We can check how many events got unclassified on a total of src_python[:results pp :session *Python*]{len(sp1)} =581=:
+
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+len([x[1] for x in round1 if x[0] == '?'])
+#+END_SRC
+
+#+RESULTS:
+: 126
+
+We can compare the first peeling with the second one (Fig. \ref{fig:SecondPeeling}):
+
+#+BEGIN_SRC python :results silent :session *Python* 
+plt.plot(tt, data1[0,], color='black')
+plt.plot(tt, data2[0,], color='red',lw=0.7)
+plt.plot(tt, data1[1,]-20, color='black')
+plt.plot(tt, data2[1,]-20, color='red',lw=0.7)
+plt.plot(tt, data1[2,]-40, color='black')
+plt.plot(tt, data2[2,]-40, color='red',lw=0.7)
+plt.plot(tt, data1[3,]-60, color='black')
+plt.plot(tt, data2[3,]-60, color='red',lw=0.7)
+plt.xlabel('Time (s)')
+plt.xlim([2.45,2.55])
+#+END_SRC
+
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/SecondPeeling.png")
+plt.close()
+"img/SecondPeeling.png"
+#+END_SRC
+
+#+CAPTION: 100 ms of data. Black, first peeling; red, second peeling.
+#+NAME: fig:SecondPeeling
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/SecondPeeling.png]]
+
+*** Third peeling :export:
+We take =data2= as our former =data1= and we repeat the procedure detecting on channel 1, but we want to do it in a more compact form and we write a dedicated function to do so:
+
+#+NAME: peel-definition
+#+BEGIN_SRC python :session *Python* :results silent
+def peel(input_data,
+         chan4detection,
+         detection_filter_length = 3,
+         detection_threshold = -3,
+         centers_dictionary = centers):
+    """Detects events, sorts them and get residuals
+
+    Parameters
+    ----------
+    input_data: a data matrix. 
+    chan4detection: the channel(s) to use for detection. An integer if a single
+                    channel is o be used for detection or a list of integers if
+                    if several channels are to be used.
+    detection_filter_length: an odd integer the length of the box filter to use
+                             for detection.
+    detection_threshold: the detection threshold (multiple of the MAD); if positive, 
+                         peaks are detected, if negative, valleys are detected.
+    centers_dictionary: a dictionary of centers (see function mk_center_dictionary).
+
+    Returns
+    -------
+    A tuple with two elements: a list with the results of classify_and_align_evt 
+      applied to each detected event.
+                               a matrix with the new residuals.
+
+    Details
+    -------
+    The function prints out the number of detected events as well as the number of
+    spikes attributed to each unit of the dictionary and the number of unclassified
+    events while running.
+    """
+    nb_channels, recording_length  = input_data.shape
+    data_filtered = apply(lambda x:
+                          fftconvolve(x,np.ones(detection_filter_length)/float(detection_filter_length),'same'),
+                          1,input_data)
+    data_filtered = (data_filtered.transpose() / \
+                     apply(swp.mad,1,data_filtered)).transpose()
+    if detection_threshold < 0:
+        data_filtered[data_filtered > detection_threshold] = 0
+        if isinstance(chan4detection,int):
+            spike_pos = swp.peak(-data_filtered[chan4detection,:])
+        else:
+            spike_pos = swp.peak(-data_filtered[chan4detection,:].sum(0))
+    else:
+        data_filtered[data_filtered < detection_threshold] = 0
+        if isinstance(chan4detection,int):
+            spike_pos = swp.peak(data_filtered[chan4detection,:])
+        else:
+            spike_pos = swp.peak(data_filtered[chan4detection,:].sum(0))
+    nb_spikes = len(spike_pos)
+    print("Number of detected events: "+str(nb_spikes))
+    classification = [swp.classify_and_align_evt(spike_pos[i],input_data,centers_dictionary) for i in range(nb_spikes)]
+    for i in range(len(centers_dictionary)):
+        nb_spikes_from_unit = len([x[1] for x in classification if x[0] == 'Cluster '+ str(i)])
+        print("    Number of spikes from unit "+str(i)+": "+str(nb_spikes_from_unit))
+    nb_unclassified = len([x[1] for x in classification if x[0] == '?'])
+    print("    Number of unclassified events: " + str(nb_unclassified))
+    pred = swp.predict_data(classification,centers_dictionary,nb_channels,recording_length)
+    return classification, input_data - pred
+
+#+END_SRC
+
+#+NAME: round2-and-data3
+#+BEGIN_SRC python :exports both :results output :session *Python*
+round2, data3 = peel(data2,1,3,-3,centers)
+#+END_SRC
+
+#+RESULTS: round2-and-data3
+#+begin_example
+Number of detected events: 452
+    Number of spikes from unit 0: 0
+    Number of spikes from unit 1: 7
+    Number of spikes from unit 2: 0
+    Number of spikes from unit 3: 1
+    Number of spikes from unit 4: 96
+    Number of spikes from unit 5: 0
+    Number of spikes from unit 6: 270
+    Number of spikes from unit 7: 2
+    Number of unclassified events: 76
+#+end_example
+
+We can compare the second peeling with the third one (Fig. \ref{fig:ThirdPeeling}):
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.plot(tt, data2[0,], color='black')
+plt.plot(tt, data3[0,], color='red',lw=0.7)
+plt.plot(tt, data2[1,]-20, color='black')
+plt.plot(tt, data3[1,]-20, color='red',lw=0.7)
+plt.plot(tt, data2[2,]-40, color='black')
+plt.plot(tt, data3[2,]-40, color='red',lw=0.7)
+plt.plot(tt, data2[3,]-60, color='black')
+plt.plot(tt, data3[3,]-60, color='red',lw=0.7)
+plt.xlabel('Time (s)')
+plt.xlim([16.15,16.25])
+#+END_SRC
+
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/ThirdPeeling.png")
+plt.close()
+'img/ThirdPeeling.png'
+#+END_SRC
+
+#+CAPTION: 100 ms of data. Black, second peeling; red, third peeling. 
+#+NAME: fig:ThirdPeeling
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/ThirdPeeling.png]]
+
+*** Fourth peeling :export:
+We take =data3= as our former =data2= and we repeat the procedure detecting on channel 2:
+
+#+NAME: round3-and-data4
+#+BEGIN_SRC python :exports both :results output :session *Python*
+round3, data4 = peel(data3,2,3,-3,centers)
+#+END_SRC
+
+#+RESULTS: round3-and-data4
+#+begin_example
+Number of detected events: 556
+    Number of spikes from unit 0: 0
+    Number of spikes from unit 1: 0
+    Number of spikes from unit 2: 0
+    Number of spikes from unit 3: 1
+    Number of spikes from unit 4: 164
+    Number of spikes from unit 5: 6
+    Number of spikes from unit 6: 333
+    Number of spikes from unit 7: 0
+    Number of unclassified events: 52
+#+end_example
+
+We can compare the third peeling with the fourth one (Fig. \ref{fig:FourthPeeling}) looking at a different part of the data than on the previous figures:
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.plot(tt, data3[0,], color='black')
+plt.plot(tt, data4[0,], color='red',lw=0.7)
+plt.plot(tt, data3[1,]-20, color='black')
+plt.plot(tt, data4[1,]-20, color='red',lw=0.7)
+plt.plot(tt, data3[2,]-40, color='black')
+plt.plot(tt, data4[2,]-40, color='red',lw=0.7)
+plt.plot(tt, data3[3,]-60, color='black')
+plt.plot(tt, data4[3,]-60, color='red',lw=0.7)
+plt.xlabel('Time (s)')
+plt.xlim([17.5,17.6])
+#+END_SRC
+
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/FourthPeeling.png")
+plt.close()
+"img/FourthPeeling.png"
+#+END_SRC
+
+#+CAPTION: 100 ms of the locust data set (different time frame than on the previous plot). Black, third peeling; red, fourth peeling. 
+#+NAME: fig:FourthPeeling
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/FourthPeeling.png]]
+
+*** General comparison :export:
+We can compare the raw data with the fourth peeling on the first second (Fig. \ref{fig:RawVSFourthPeeling}):
+
+#+BEGIN_SRC python :results silent :session *Python*
+plt.plot(tt, data0[0,], color='black')
+plt.plot(tt, data4[0,], color='red',lw=0.5)
+plt.plot(tt, data0[1,]-20, color='black')
+plt.plot(tt, data4[1,]-20, color='red',lw=0.5)
+plt.plot(tt, data0[2,]-40, color='black')
+plt.plot(tt, data4[2,]-40, color='red',lw=0.5)
+plt.plot(tt, data0[3,]-60, color='black')
+plt.plot(tt, data4[3,]-60, color='red',lw=0.5)
+plt.xlabel('Time (s)')
+plt.xlim([0,1])
+#+END_SRC
+
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/RawVSFourthPeeling.png")
+plt.close()
+"img/RawVSFourthPeeling.png"
+#+END_SRC
+
+#+CAPTION: The first second of the locust data set. Black, raw data; red, fourth peeling.
+#+NAME: fig:RawVSFourthPeeling
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/RawVSFourthPeeling.png]]
+
+We can also look at the remaining unclassified events; they don't look like any of our templates (Fig. \ref{fig:FourthPeelingRemainingBad}):
+
+#+BEGIN_SRC python :results silent :session *Python*
+bad_ones = [x[1] for x in round3 if x[0] == '?']
+r3BE = swp.mk_events(bad_ones, data3)
+swp.plot_events(r3BE)
+#+END_SRC
+
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/FourthPeelingRemainingBad.png")
+plt.close()
+"img/FourthPeelingRemainingBad.png"
+#+END_SRC
+
+#+CAPTION: The 52 remaining bad events after the fourth peeling.
+#+NAME: fig:FourthPeelingRemainingBad
+#+ATTR_LaTeX: :width 0.8\textwidth
+#+RESULTS:
+[[file:img/FourthPeelingRemainingBad.png]]
+
+** Getting the spike trains :export:
+Once we have decided to stop the peeling iterations we can extract our spike trains with (notice the syntax difference between =Python 3= and =Python 2=):
+
+#+NAME: spike_trains
+#+BEGIN_SRC python :results silent :session *Python*
+try:
+    round_all = round0.copy() # Python 3
+except AttributeError:
+    round_all = round0[:] # Python 2
+
+round_all.extend(round1)
+round_all.extend(round2)
+round_all.extend(round3)
+spike_trains = { n : np.sort([x[1] + x[2] for x in round_all
+                              if x[0] == n]) for n in list(centers)}
+#+END_SRC
+
+The number of spikes attributed to each neuron is:
+
+#+BEGIN_SRC python :exports both :results pp :session *Python*
+[(n,len(spike_trains[n])) for n in ['Cluster '+str(i) for i in range(8)]]
+#+END_SRC
+
+#+RESULTS:
+: [('Cluster 0', 75),
+:  ('Cluster 1', 259),
+:  ('Cluster 2', 126),
+:  ('Cluster 3', 71),
+:  ('Cluster 4', 978),
+:  ('Cluster 5', 451),
+:  ('Cluster 6', 1609),
+:  ('Cluster 7', 37)]
+
+Keep in mind that clusters 4 and 6 are very close to noise level and should not be considered for further analysis.
+
+* Defining classes and methods for a systematic analysis of the remaining of the experiment :export:
+
+At that stage we want to take the next epoch of 29 seconds of spontaneous activity and, using our "templates catalog", =centers=, recursively detect spikes, subtract the closest catalog member, until there is "nothing left". To track potential electrode drifts resulting in clusters waveform changes, we want, after the classification of each epoch, to recompute the median of each cluster as long as the latter as enough associated events or make a compromise between the former median and the new one when there aren't enough associated events. Do do all that, we don't want to type as many command lines as we just did; that's why we are going to introduce some classes and associated methods.
+
+** MultiChannelData Class
+
+We start with a =Class= that we call =MultiChannelData=. In general we think of using it to store and display multi-channel data (like data from a tetrode), but we will design it to work with single channel data as well. The class objects have the following attributes:
++ =data=: an alias (pointer) to the data stored a =numpy= matrix with as many rows as channels and as many columns as sampling points.
++ =start=: the time (in seconds) of the first sampling point.
++ =sampling_rate=: the sampling rate in Hz.
++ =channel_names=: a list of strings with the channel names.
++ =nb_channels=: the number of channels.
++ =duration=: the data length (in seconds) referred to by the object.
++ =median=: a vector with as many elements as channels containing the median computed on each channel.
++ =mad=: a vector with as many elements as channels containing the median absolute deviation computed on each channel.
++ =mean=: a vector with as many elements as channels containing the mean computed on each channel.
++ =std=: a vector with as many elements as channels containing the standard deviation computed on each channel.
++ =variance=: a vector with as many elements as channels containing the variance computed on each channel.
++ =ptp=: a vector with as many elements as channels containing the peak to peak difference computed on each channel.
+The following methods can be called:
++ =sample2time=: given a sample point, returns the corresponding time.
++ =time2sample=: given a time, returns a sampling point.
++ =quantiles=: given a vector of probabilities, returns a vector with the corresponding empirical quantiles.
++ =copy=: returns a new instance / object of =MultiChannelData= containing a copy of the original object (the data referred to are then actually copied).
++ =plot=: create a plot showing the data.
++ =offset=: given a vector with as many elements as recording channels, returns a new instance / object of =MultiChannelData= containing a copy of the original object where the data referred to have been copied and offset.
++ =scale=:  given a vector with as many elements as recording channels, returns a new instance / object of =MultiChannelData= containing a copy of the original object where the data referred to have been copied and scaled.
++ =normalize=: returns a new instance / object of =MultiChannelData= containing a copy of the original object where the data referred to have been copied offset by the median and scaled by the MAD.
++ =derivative=: returns a new instance / object of =MultiChannelData= containing a copy of the original object where the data referred to have been copied and differentiated using the central difference and using the sampling period as a time unit.
++ =box_filter=: returns a new instance / object of =MultiChannelData= containing a copy of the original object where the data referred to have been copied and box filtered.
++ =rectify=: returns a new instance / object of =MultiChannelData= containing a copy of the original object where the data referred to have been copied and rectified.
++ =find_extrema=: returns a vector or a dictionary containing local extrema locations.
+A length (=len=) special method is defined, a =print= special method is defined returning a short written summary of the instance content and subsetting can be performed on the object like on a "classical" matrix. A subtraction special method is defined allowing the subtraction of two MultiChannelData instances is defined. 
+
+#+NAME: MultiChannelData-Class-defintion
+#+BEGIN_SRC python :session *Python* :results silent
+class MultiChannelData:
+    """Mutli- or Single- channel data."""
+    def __init__(self, data, channel_names, start=0, sampling_rate=15000):
+        """Create a new MultiChannelData instance.
+
+        data           an array (nb_channels x nb_samples) or a list containing the data
+        channel_names  a list of strings with the channel names 
+                       (like ['Ch 1','Ch 2','Ch 3','Ch 4']) or a string with the single
+                       channel name if data from one electrode are used
+        start          the time (in seconds) at which acquisition started 
+        sampling_rate  the sampling_rate used during the acquisition (in Hz)
+        """
+        import numpy as np
+        if not isinstance(data,(list,np.ndarray)):
+            raise TypeError('data must be a list or a numpy ndarray')
+        elif sampling_rate <= 0:
+            raise ValueError('sampling_rate must be positive')
+        if isinstance(data,list):
+            self._data = np.array(data)
+        else:
+            self._data = data.copy()
+        if not isinstance(channel_names,list):
+            channel_names = [channel_names]
+        if not all([isinstance(n,str) for n in channel_names]):
+            raise ValueError('elements of channel_names must be string instances')
+        self.start = start
+        self.channel_names = channel_names
+        self.sampling_rate = sampling_rate
+        self.nb_channels, self.length = self._data.shape
+    @property
+    def duration(self):
+        """The recording duration in seconds."""
+        return self.length/self.sampling_rate
+    def __len__(self):
+        """Return number of samples."""
+        return self.length
+    @property
+    def data(self):
+        """Extract the actual data."""
+        return self._data
+    def sample2time(self,sample_point):
+        """Converts sample point to time in seconds."""
+        if not 0 <= sample_point <= self.length:
+            raise ValueError('sample_point must be non negative and smaller than ' + str(self.length))
+        return sample_point/self.sampling_rate + self.start
+    def time2sample(self,time):
+        """Converts time in second to sample point."""
+        if not self.start <= time < self.start+self.duration:
+            raise ValueError('time must be larger than ' + str(self.start) + ' and  smaller than ' + str(self.start+self.duration))
+        return round((time-self.start)*self.sampling_rate)
+    def quantiles(self, prob=[0,0.25,0.5,0.75,1]):
+        """Return quantiles of each channel.
+
+        prob see mquantiles in scipy.stats.mstats (default gives 5 numbers summary)
+        """
+        from scipy.stats.mstats import mquantiles
+        return mquantiles(self._data,prob=prob, axis=1)
+    @property
+    def median(self):
+        """Return median of each channel."""
+        import numpy as np
+        return np.median(self._data,axis=1)
+    def offset(self,amount=None):
+        """Return a new MultiChannelData instance whereeach channel is offest by the content of amount.
+
+        If amount is not specified the median is used.
+        """
+        import numpy as np
+        if amount is None:
+            amount = self.median
+        if not len(amount) == self.nb_channels:
+            raise ValueError("amount's length must be " + str(self.nb_channels))
+        return MultiChannelData(self._data - np.array(amount).reshape(self.nb_channels,1),self.channel_names,self.start,self.sampling_rate)
+    @property
+    def mad(self):
+        """Return median absolute deviation of each channel."""
+        import numpy as np
+        return np.median(np.absolute(self._data-self.median.reshape(self.nb_channels,1)),axis=1)*1.4826
+    def scale(self,factors=None):
+        """Return a new MultiChannelData instance where each channel is divided by the corresponding element of factors.
+
+        If factors is not specified the MAD is used.
+        """
+        import numpy as np
+        if factors is None:
+            factors = self.mad
+        if not len(factors) == self.nb_channels:
+            raise ValueError("factors' length must be " + str(self.nb_channels))
+        return MultiChannelData(self._data / np.array(factors).reshape(self.nb_channels,1),self.channel_names,self.start,self.sampling_rate)
+    @property
+    def normalize(self):
+        """Return a new MultiChannelData instance with normalized (median null and MAD at 1) amplitudes on each channel."""
+        import numpy as np
+        norm_data = (self._data - self.median.reshape(self.nb_channels,1))/self.mad.reshape(self.nb_channels,1)
+        return MultiChannelData(norm_data,self.channel_names,self.start,self.sampling_rate)
+    @property
+    def mean(self):
+        """Return mean of each channel."""
+        import numpy as np
+        return np.mean(self._data,axis=1)
+    @property
+    def std(self):
+        """Return standard deviation of each channel."""
+        import numpy as np
+        return np.std(self._data,axis=1)
+    @property
+    def var(self):
+        """Return variance of each channel."""
+        import numpy as np
+        return np.var(self._data,axis=1)
+    @property
+    def ptp(self):
+        """Return peak to peak difference of each channel."""
+        import numpy as np
+        return np.ptp(self._data,axis=1)
+    def copy(self):
+        """Return a new instance that is a copy of the present one."""
+        return MultiChannelData(self._data.copy(),self.channel_names,self.start,self.sampling_rate)
+    def __getitem__(self,key):
+        """Return a new subsetted instance."""
+        if isinstance(key,int):
+            foo = self.data.__getitem__(key)
+            return MultiChannelData(foo,[self.channel_names[key]],self.start,self.sampling_rate)
+        if isinstance(key,str):
+            key = self.channel_names.index(key)
+            foo = self.data.__getitem__(key)
+            return MultiChannelData(foo,[self.channel_names[key]],self.start,self.sampling_rate)
+        if isinstance(key,list):
+            if all([n in self.channel_names for n in key]):
+                key = [self.channel_names.index(n) for n in key]
+            if all([n in list(range(len(self.channel_names))) for n in key]):
+                foo = self.data.__getitem__(key)
+                return MultiChannelData(foo,[self.channel_names[n] for n in key],self.start,self.sampling_rate)
+        if isinstance(key,tuple):
+            if len(key) == 1:
+                key = key[0]
+                if isinstance(key,int):
+                    foo = self.data.__getitem__(key)
+                    return MultiChannelData(foo,[self.channel_names[key]],self.start,self.sampling_rate)
+                if isinstance(key,str):
+                    key = self.channel_names.index(key)
+                    foo = self.data.__getitem__(key)
+                    return MultiChannelData(foo,[self.channel_names[key]],self.start,self.sampling_rate)
+                if isinstance(key,list):
+                    if all([n in self.channel_names for n in key]):
+                        key = [self.channel_names.index(n) for n in key]
+                    if all([n in list(range(len(self.channel_names))) for n in key]):
+                        foo = self.data.__getitem__(key)
+                        return MultiChannelData(foo,[self.channel_names[n] for n in key],self.start,self.sampling_rate)
+                else:
+                    foo = self.data.__getitem__(key)
+                    return MultiChannelData(foo,self.channel_names[key[0]],self.start,self.sampling_rate)
+        if not len(key) == 2:
+            raise ValueError('key must select along both dimensions')
+        if isinstance(key[1],slice) and not key[1].step is None:
+            raise ValueError('selection along the second dimension must be done with a step of 1')
+        if isinstance(key[0],str):
+            key0 = self.channel_names.index(key[0])
+        elif hasattr(key[0],'__iter__') and all([isinstance(n,str) for n in key[0]]):
+            key0 = [self.channel_names.index(n) for  n in key[0]]
+        else:
+            key0 = key[0]
+        newkey = key0,key[1] 
+        foo = self._data.__getitem__(newkey)
+        if len(foo.shape)==1:
+            foo.shape = (1,foo.shape[0])
+        if isinstance(newkey[1],slice) and newkey[1].start is None:
+            begin = self.start
+        elif isinstance(newkey[1],slice) and not newkey[1].start is None:
+            begin = newkey[1].start/self.sampling_rate+self.start
+        else:
+            begin = newkey[1][0]/self.sampling_rate+self.start
+        if isinstance(newkey[0],slice) or isinstance(newkey[0],int):
+            channel_names = self.channel_names[newkey[0]]
+        elif isinstance(newkey[0],str):
+            channel_names = [newkey[0]]
+        elif all([n in self.channel_names for n in newkey[0]]):
+            channel_names = newkey[0]
+        else:
+            channel_names = [self.channel_names[n] for n in newkey[0]]
+        return MultiChannelData(foo,channel_names,begin,self.sampling_rate)
+    def __str__(self):
+        """Controls the printed version of the instance."""
+        import numpy as np
+        quant = self.quantiles()
+        FNS = ["  " + self.channel_names[i] + ": " + str(quant[i,:]) for i in range(self.nb_channels)] 
+        return "An instance of MultiChannelData.\n" \
+            + "  It is built from channels: " + str(self.channel_names) +".\n" \
+            + "  Recording starts at: " + str(self.start) + " (seconds).\n" \
+            + "  The number of sampling points is: " + str(len(self)) + " and the sampling rate is: " \
+            + str(self.sampling_rate) + " (Hz).\n" \
+            + "  The five number summary for each channel is:\n" \
+            + "\n".join(FNS) + "\n" \
+            + "  The MAD of each channel is:\n" + str(self.mad) + "\n"
+    def __sub__(self,other):
+        """Subtract two MultiChannelData instances."""
+        if not isinstance(other,MultiChannelData):
+            raise TypeError('The right member of the subtraction should also be a MultiChannelDataInstance')
+        if self.channel_names != other.channel_names:
+            raise ValueError('Attributes channel_names not identical')
+        if self.start != other.start:
+            raise ValueError('Attributes start not identical')
+        if self.sampling_rate != other.sampling_rate:
+            raise ValueError('Attributes sampling_rate not identical')
+        return MultiChannelData(self.data - other.data,self.channel_names,self.start,self.sampling_rate)
+    def plot(self,linewidth=0.2,color='black',xlabel="Time (s)",data_range=None):
+        """Plot the data."""
+        import matplotlib.pyplot as plt
+        import numpy as np
+        nb_chan = self.nb_channels
+        if data_range is None:
+            data_min = np.min(self._data,axis=1) 
+            data_max = np.max(self._data,axis=1)
+        else:
+            data_min = data_range[0]
+            data_max = data_range[1]
+        display_offset = list(np.cumsum(np.array([0] +
+                                                 [data_max[i]-data_min[i-1]
+                                                  for i in range(1,nb_chan)])))
+        tt = np.arange(len(self))/self.sampling_rate+self.start
+        for i in range(nb_chan):
+            plt.plot(tt,self._data[i,:]-display_offset[i],
+                     linewidth=linewidth,color=color)
+        plt.yticks([])
+        plt.xlim([self.start,self.start+self.duration])
+        plt.xlabel(xlabel)
+    @property
+    def derivative(self):
+        """Return a MultiChannelData instance with the time derivative of the original one (the time unit is the sampling period)."""
+        from scipy.signal import fftconvolve
+        from numpy import apply_along_axis as apply
+        return MultiChannelData(apply(lambda x: fftconvolve(x,np.array([1,0,-1])/2.,'same'),1, self._data),
+                                self.channel_names,self.start,self.sampling_rate)
+    def box_filter(self,filter_length):
+        """Return a MultiChannelData instance with each channel box filtered with a filter of length filter_length."""
+        from scipy.signal import fftconvolve
+        import numpy as np
+        from numpy import apply_along_axis as apply
+        if not isinstance(filter_length,int) or filter_length <= 0:
+            raise TypeError('filter_length must be a positive integer')
+        data_filtered = apply(lambda x:
+                              fftconvolve(x,np.ones(filter_length)/filter_length,'same'),
+                              1,self._data)
+        return MultiChannelData(data_filtered,self.channel_names,self.start,self.sampling_rate)
+    def rectify(self,threshold):
+        """Return a MultiChannelData instance with each channel value set to zero if 
+        its initial value is smaller than threshold (when the latter is positve) or
+        larger than threshold (when the latter is negative). The initial amplitudes
+        are normalized first (median set at 0 and MAD at 1).
+        """
+        import numpy as np
+        rect_data = self.normalize.data
+        if threshold < 0:
+            rect_data[rect_data > threshold] = 0
+        else:
+            rect_data[rect_data < threshold] = 0
+        return MultiChannelData(rect_data,self.channel_names,self.start,self.sampling_rate)
+    def find_extrema(self,filter_length=3,threshold=-4,minimal_dist=15,not_zero=1e-3,return_dict=False):
+        """Return an array with extrema locations (in sample points) or a dictionnary with 
+        extrema postions and all the parameters.
+
+        filter_length   the length (in sample points) of the box_filter
+                        applied prior to rectification.
+        threshold       the multiple of the MAD used to detect extrema:
+                        minima if threshold in negative, maxima otherwise.
+        minimal_dist    a positive integer, the minimal distance between two successive peaks
+        not_zero        a positive float, the smallest value above which the absolute value of
+                        the derivative is considered not null.
+        return_dict     a boolean controlling the type of result
+        
+        The filtered version of the data is normalized (median set at 0 and
+        MAD set at 1) before rectification.
+        """
+        import numpy as np
+        from scipy.signal import fftconvolve
+        from numpy import apply_along_axis as apply
+        if not isinstance(threshold,(int,float)):
+            raise TypeError('threshold must be a number')
+        if not isinstance(filter_length,int) or filter_length <= 0:
+            raise TypeError('filter_length must be a positive integer')
+        if not isinstance(minimal_dist,int) or minimal_dist <= 0:
+            raise TypeError('minimal_dist must be a positive integer')
+        if not isinstance(not_zero,float) or not_zero <= 0:
+            raise TypeError('not_zero must be a positive float')
+        target = self.normalize.box_filter(filter_length).rectify(threshold).data
+        if threshold < 0:
+            target = -target.sum(0)
+        else:
+            target = target.sum(0)
+        dx = fftconvolve(target,np.array([1,0,-1])/2.,'same') 
+        dx[np.abs(dx) < not_zero] = 0
+        dx = np.diff(np.sign(dx))
+        pos = np.arange(len(dx))[dx < 0]
+        if return_dict:
+            return {"MCD_instance": self,
+                    "threshold": threshold,
+                    "filter_length": filter_length,
+                    "minimal_dist": minimal_dist,
+                    "not_zero": not_zero,
+                    "spike_positions": pos[:-1][np.diff(pos) > minimal_dist]}
+        else:
+            return pos[:-1][np.diff(pos) > minimal_dist]
+
+#+END_SRC
+
+*** Example of use
+
+We could get the equivalent of our previous =data= list with:
+
+#+NAME: MultiChannelData-instanciation-example
+#+BEGIN_SRC python :session *Python* :results silent
+Data = MultiChannelData([hdf['Continuous_1']['trial_01'][name][...] for name in ['ch09','ch11','ch13','ch16']],
+                        ['ch09','ch11','ch13','ch16'])
+#+END_SRC
+
+We can then get a short written summary of the instance content with:
+
+#+NAME: MultiChannelData-print-example
+#+BEGIN_SRC python :session *Python* :exports both :results output
+print(Data)
+#+END_SRC
+
+#+RESULTS: MultiChannelData-print-example
+#+begin_example
+An instance of MultiChannelData.
+  It is built from channels: ['ch09', 'ch11', 'ch13', 'ch16'].
+  Recording starts at: 0 (seconds).
+  The number of sampling points is: 431548 and the sampling rate is: 15000 (Hz).
+  The five number summary for each channel is:
+  ch09: [  967.  2016.  2057.  2097.  2443.]
+  ch11: [ 1370.  2020.  2057.  2093.  2654.]
+  ch13: [ 1128.  2013.  2059.  2103.  2451.]
+  ch16: [ 1767.  2021.  2057.  2092.  2300.]
+  The MAD of each channel is:
+[ 59.304   54.8562  66.717   53.3736]
+#+end_example
+
+The peak to peak difference is obtained with:
+
+#+NAME: MultiChannelData-ptp-example
+#+BEGIN_SRC python :session *Python* :exports both
+Data.ptp
+#+END_SRC
+
+#+RESULTS: MultiChannelData-ptp-example
+| 1476 | 1284 | 1323 | 533 |
+
+We could get the five-number summary with (not shown):
+
+#+NAME: MultiChannelData-quantiles-example
+#+BEGIN_SRC python :session *Python* :exports code
+Data.quantiles()
+#+END_SRC
+
+#+RESULTS: MultiChannelData-quantiles-example
+|  967 | 2016 | 2057 | 2097 | 2443 |
+| 1370 | 2020 | 2057 | 2093 | 2654 |
+| 1128 | 2013 | 2059 | 2103 | 2451 |
+| 1767 | 2021 | 2057 | 2092 | 2300 |
+
+The documentation of the =plot= method can be obtained with:
+
+#+NAME: MultiChannelData-plot-doc
+#+BEGIN_SRC python :session *Python* :exports both :results output
+help(Data.plot)
+#+END_SRC
+
+#+RESULTS: MultiChannelData-plot-doc
+: Help on method plot in module __main__:
+: 
+: plot(linewidth=0.2, color='black', xlabel='Time (s)', data_range=None) method of __main__.MultiChannelData instance
+:     Plot the data.
+
+Making a plot is rather easy (result not shown):
+
+#+NAME: MultiChannelData-plot-example
+#+BEGIN_SRC python :session *Python* :eval no-export
+Data.plot()
+#+END_SRC
+
+#+RESULTS: MultiChannelData-plot-example
+
+Making a plot showing the first channel only is done with (results not shown):
+
+#+NAME: MultiChannelData-subset-and-plot-example
+#+BEGIN_SRC python :session *Python* :eval no-export
+Data[0,:].plot()
+#+END_SRC
+
+#+RESULTS: MultiChannelData-subset-and-plot-example
+
+And making a plot with the second and third channels using their names is done with (results not shown):
+
+#+NAME: MultiChannelData-subset-and-plot-example2
+#+BEGIN_SRC python :session *Python* :eval no-export
+Data[['ch11','ch13']].plot()
+#+END_SRC
+
+#+RESULTS: MultiChannelData-subset-and-plot-example2
+
+and the following two syntaxes work just as well:
+
+#+NAME: MultiChannelData-subset-and-plot-example3
+#+BEGIN_SRC python :session *Python* :eval no-export
+Data[['ch11','ch13'],].plot()
+Data[['ch11','ch13'],:].plot()
+#+END_SRC
+
+#+RESULTS: MultiChannelData-subset-and-plot-example3
+
+The median could be obtained with (result not shown):
+
+#+NAME: MultiChannelData-median-example
+#+BEGIN_SRC python :session *Python* :exports code
+Data.median
+#+END_SRC
+
+#+RESULTS: MultiChannelData-median-example
+| 2057 | 2057 | 2059 | 2057 |
+
+And the MAD with (result not shown):
+
+#+NAME: MultiChannelData-MAD-example
+#+BEGIN_SRC python :session *Python* :exports code
+Data.mad
+#+END_SRC
+
+#+RESULTS: MultiChannelData-MAD-example
+| 59.304 | 54.8562 | 66.717 | 53.3736 |
+
+A graph showing for a normalized version of the first recording site:
++ the raw data (black),
++ the first derivative (red),
++ the box-filtered version of the raw data with a filter length of 3 points (blue),
++ a rectified version of the latter setting everything above 3 to 0 (orange),
+is obtained with:
+
+#+NAME: MultiChannelData-subset-and-plot-example2
+#+BEGIN_SRC python :session *Python* :results silent
+Data[0,Data.time2sample(4.28):Data.time2sample(4.3)].normalize.plot(color='black',linewidth=2)
+Data[0,Data.time2sample(4.28):Data.time2sample(4.3)].normalize.derivative.plot(color='red',linewidth=2)
+Data[0,Data.time2sample(4.28):Data.time2sample(4.3)].normalize.box_filter(3).plot(color='blue',linewidth=2)
+Data[0,Data.time2sample(4.28):Data.time2sample(4.3)].normalize.box_filter(3).rectify(-3).plot(color='orange',linewidth=1)
+plt.yticks(range(-15,10,5))
+plt.ylim([-15,7])
+plt.grid()
+#+END_SRC
+
+#+NAME: MultiChannelData-subset-and-plot-example2-fig
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/MultiChannelData-subset-and-plot-example2.png")
+plt.close()
+"img/MultiChannelData-subset-and-plot-example2.png"
+#+END_SRC
+
+#+CAPTION: Example of use of =subsetting= / =time2sample= / =normalize= / =derivative= / =box_filter= / =rectify= methods for MultiChannelData objects.
+#+ATTR_LATEX: :width 1.0\textwidth
+#+NAME: fig:MultiChannelData-subset-and-plot-example2-fig
+#+RESULTS: MultiChannelData-subset-and-plot-example2-fig
+[[file:img/MultiChannelData-subset-and-plot-example2.png]]
+
+** DetectedSpikes Class
+
+Instances of =class= =DetectedSpikes= will store the spikes (local maxima or minima) detection results. They are essentially vectors of sampling points with the following attributes:
++ =spike_positions=: a vector containing the positions (in sampling points) of the detected spikes.
++ =threshold=: the detection threshold used as a multiple of the MAD on each site. If positive, respectively negative, peaks, respectively valleys are detected.
++ =filter_length=: an odd positive integer, the length of the box filter applied to the data prior to extrema detection.
++ =minimal_dist=: a positive integer, the minimal distance between two successive peaks. When to peak are found within this minimal distance, the first is kept (superposed events are resolved as such subsequently).
++ =not_zero=: a positive float, the smallest value above which the absolute value of the derivative is considered not null (a "technical" parameter used to cope with precision loss during numerical computation).  
+The following methods are available:
++ =plot=: generates a graph of the raw data with the detected spikes superposed (appearing as red disks).
++ =mk_cuts=: generates a matrix or a dictionary containing the cuts, that is portions of the raw data with the spike located at a given position within the cut.
++ =mk_in_between_cuts=: generates a matrix or a dictionary containing cuts made "in between" spikes, that is portions of the raw data with no detected spike.
+A length (=len=) special method is defined, a =print= special method is defined returning a short written summary of the instance content and subsetting can be performed on the object like on a "classical" vector.   
+
+#+NAME: DetectedSpikes-Class-definition
+#+BEGIN_SRC python :session *Python* :results silent
+class DetectedSpikes:
+    """Detected spikes."""
+    def __init__(self,MCD_instance,channels4detection=None,threshold=4,filter_length=3,minimal_dist=15,not_zero=1e-3,spike_positions=None):
+        """Create a new DetectedSpikes instance.
+
+        MCD_instance       a MultiChannelData instance
+        channels4detection the channels used for detection
+        threshold          a number, the mutiple of the MAD beyond which extrema are recorded 
+                           (positive for peaks, negative for valleys)
+        filter_length      a positive integer setting the length of the box filter used to 
+                           filter the data prior to detection
+        minimal_dist       a positive integer, the minimal distance between two successive peaks
+        not_zero           a positive float, the smallest value above which the absolute value of
+                           the derivative is considered not null.
+        spike_positions    an array with spike indexes or None.
+        """
+        import numpy as np
+        from scipy.signal import fftconvolve
+        from numpy import apply_along_axis as apply
+        if not isinstance(MCD_instance,MultiChannelData):
+            raise TypeError('MCD_instance must be a MultiChannelData instance')
+        if not isinstance(threshold,(int,float)):
+            raise TypeError('threshold must be a number')
+        if not isinstance(filter_length,int) or filter_length <= 0:
+            raise TypeError('filter_length must be a positive integer')
+        if not isinstance(minimal_dist,int) or minimal_dist <= 0:
+            raise TypeError('minimal_dist must be a positive integer')
+        if not isinstance(not_zero,float) or not_zero <= 0:
+            raise TypeError('not_zero must be a positive float')
+        if not spike_positions is None and not isinstance(spike_positions,np.ndarray):
+            raise TypeError('spike_positions must be an array')
+        if channels4detection is None:
+            channels4detection = list(range(MCD_instance.data.shape[0]))
+        self._MCD = MCD_instance
+        self.channels4detection = channels4detection
+        self.threshold = threshold
+        self.filter_length = filter_length
+        self.minimal_dist = minimal_dist
+        self.not_zero = not_zero
+        if spike_positions is None:
+            spike_positions = MCD_instance[channels4detection,:].find_extrema(filter_length,threshold,minimal_dist,not_zero)
+        self.spike_positions = spike_positions
+    def __len__(self):
+        """Return the number of detected spikes."""
+        return len(self.spike_positions)
+    def __str__(self):
+        """Controls the printed version of the instance."""
+        import numpy as np
+        if isinstance(self.channels4detection, slice):
+            channel_names = self._MCD.channel_names[self.channels4detection]
+        elif isinstance(self.channels4detection, int):
+            channel_names = [self._MCD.channel_names[self.channels4detection]]
+        elif isinstance(self.channels4detection, str):
+            channel_names = [self.channels4detection]
+        elif all([n in self._MCD.channel_names for n in self.channels4detection]):
+            channel_names = self.channels4detection
+        else:
+            channel_names = [self._MCD.channel_names[n] for n in self.channels4detection]
+        return "An instance of DetectedSpikes.\n" \
+            + "  Spikes were detected on " + str(len(channel_names)) + " channels simultaneously " \
+            + str(channel_names) + ".\n" \
+            + "  A box filter with length " + str(self.filter_length) + " was used.\n" \
+            + "  The detection threshold (multiple of the MAD) was set at " + str(self.threshold) + ".\n" \
+            + "  " + str(len(self.spike_positions)) + " putative spikes were detected. The smallest inter spike interval is: " \
+            + str(np.min(np.diff(self.spike_positions))) + ", and the largest is: " + str(np.max(np.diff(self.spike_positions))) \
+            + ".\n  The mean ISI is: " + str(int(np.mean(np.diff(self.spike_positions)))) + " and the ISI SD is: " \
+            + str(int(np.std(np.diff(self.spike_positions)))) + ".\n"
+    def plot(self,linewidth=0.2,color='black',xlabel="Time (s)"):
+        """Plot the data with the detected spikes."""
+        import matplotlib.pyplot as plt
+        import numpy as np
+        nb_chan = self._MCD.data.shape[0]
+        data_min = np.min(self._MCD._data,axis=1) 
+        data_max = np.max(self._MCD._data,axis=1)
+        display_offset = list(np.cumsum(np.array([0] +
+                                                 [data_max[i]-data_min[i-1]
+                                                  for i in range(1,nb_chan)])))
+        tt = np.arange(len(self._MCD))/self._MCD.sampling_rate+self._MCD.start
+        for i in range(nb_chan):
+            plt.plot(tt,self._MCD._data[i,:]-display_offset[i],
+                     linewidth=linewidth,color=color)
+            plt.plot(tt[self.spike_positions],
+                     self._MCD._data[i,self.spike_positions]-display_offset[i],'ro')
+        plt.yticks([])
+        plt.xlim([self._MCD.start,self._MCD.start+self._MCD.duration])
+        plt.xlabel(xlabel)
+    def __getitem__(self,key):
+        """Return a new subsetted instance."""
+        spike_positions = self.spike_positions[key]
+        return DetectedSpikes(self._MCD,self.channels4detection,self.threshold,self.filter_length,self.minimal_dist,self.not_zero,spike_positions)
+    def _cut_sgl_evt(self,evt_pos,before,after):
+        """Make a cut from the raw data 'centered' on evt_pos and return a vector.
+
+        evt_pos  the spike position
+        before   a positive integer specifying were the cut starts before the spike position
+        after    a positive integer specifying were the cut ends after the spike position
+        """
+        import numpy as np
+        ns,dl = self._MCD._data.shape
+        cl = before+after+1 ## The length of the cut
+        cs = cl*ns ## The 'size' of a cut
+        cut = np.zeros((ns,cl))
+        idx = np.arange(-before,after+1)
+        keep = idx + evt_pos
+        within = np.bitwise_and(0 <= keep, keep < self._MCD.data.shape[1])
+        kw = keep[within]
+        cut[:,within] = self._MCD.data[:,kw].copy()
+        return cut.reshape(cs)
+    def mk_cuts(self,before=14, after=30,return_dict=False):
+        """Make cuts from the raw data 'centered' on spike positions and
+        return a matrix or a dictionnary with the cuts as well as all the parameters.
+
+        before      a positive integer specifying were the cut starts before the spike position
+        after       a positive integer specifying were the cut ends after the spike position
+        return_dict a boolean controlling the type of result
+        """
+        import numpy as np
+        if not isinstance(before,int) or before <= 0:
+            raise TypeError('before must be a positive integer')
+        if not isinstance(after,int) or after <= 0:
+            raise TypeError('after must be a positive integer')
+        ns,dl = self._MCD._data.shape
+        res = np.zeros((len(self),(before+after+1)*ns))
+        for i,p in enumerate(self.spike_positions):
+            res[i,:] = self._cut_sgl_evt(p,before,after)
+        if return_dict:
+            return {"DS_instance": self,
+                    "before": before,
+                    "after": after,
+                    "cuts": res}
+        else:
+            return res
+    def mk_in_between_cuts(self,before=14, after=30, safety_factor=2, size=2000, return_dict=False):
+        """Make cuts from the raw data 'in between' spike cuts and
+        return a matrix or a dictionnary with the cuts as well as all the parameters.
+
+        before         a positive integer specifying were the cut starts before the spike position
+        after          a positive integer specifying were the cut ends after the spike position
+        safety_factor  a number by which the cut length is multiplied and which sets the minimal 
+                       distance between two successive spike times
+        size           the maximal number of noise events one wants to cut (the actual number 
+                       obtained might be smaller depending on the data length, the cut length, the 
+                       safety factor and the number of events)
+        return_dict a boolean controlling the type of result
+        """
+        import numpy as np
+        if not isinstance(before,int) or before <= 0:
+            raise TypeError('before must be a positive integer')
+        if not isinstance(after,int) or after <= 0:
+            raise TypeError('after must be a positive integer')
+        if not isinstance(safety_factor,(int,float)) or safety_factor <= 0:
+            raise TypeError('safety_factor must be a positive number')
+        if not isinstance(size,int) or size <= 0:
+            raise TypeError('size must be a positive integer')
+        ns,dl = self._MCD._data.shape
+        sl = before+after+1 ## cut length
+        i1 = np.diff(self.spike_positions) ## inter-event intervals
+        minimal_length = round(sl*safety_factor)
+        ## Get next the number of noise sweeps that can be
+        ## cut between each detected event with a safety factor
+        nb_i = (i1-minimal_length)//sl
+        ## Get the number of noise sweeps that are going to be cut
+        nb_possible = min(size,sum(nb_i[nb_i>0]))
+        res = np.zeros((nb_possible,sl*ns))
+        ## Create next a list containing the indices of the inter event
+        ## intervals that are long enough
+        idx_l = [i for i in range(len(i1)) if nb_i[i] > 0]
+        ## Make next an index running over the inter event intervals
+        ## from which at least one noise cut can be made
+        interval_idx = 0
+        n_idx = 0
+        while n_idx < nb_possible:
+            within_idx = 0 ## an index of the noise cut with a long enough interval
+            i_pos = self.spike_positions[idx_l[interval_idx]] + minimal_length
+            ## The variable defined next contains the number of noise cuts
+            ## that can be made from the "currently" considered long-enough
+            ## inter event interval
+            n_at_interval_idx = nb_i[idx_l[interval_idx]]
+            while within_idx < n_at_interval_idx and n_idx < nb_possible:
+                res[n_idx,:]= self._cut_sgl_evt(int(i_pos),before,after)
+                n_idx += 1
+                i_pos += sl
+                within_idx += 1
+            interval_idx += 1
+        if return_dict:
+            return {"DS_instance": self,
+                    "before": before,
+                    "after": after,
+                    "safety_factor":safety_factor,
+                    "cuts": res}
+        else:
+            return res
+
+#+END_SRC
+
+*** Example of use
+
+Spikes can be detected with:
+
+#+NAME: DetectedSpikes-instanciation-example
+#+BEGIN_SRC python :session *Python* :results silent
+Spike = DetectedSpikes(Data,threshold=-3,filter_length=5) 
+#+END_SRC
+
+A written summary is obtained with:
+
+#+NAME: DetectedSpikes-print-example
+#+BEGIN_SRC python :session *Python* :results output :exports both
+print(Spike)
+#+END_SRC
+
+#+RESULTS: DetectedSpikes-print-example
+: An instance of DetectedSpikes.
+:   Spikes were detected on 4 channels simultaneously ['ch09', 'ch11', 'ch13', 'ch16'].
+:   A box filter with length 5 was used.
+:   The detection threshold (multiple of the MAD) was set at -3.
+:   2242 putative spikes were detected. The smallest inter spike interval is: 16, and the largest is: 2145.
+:   The mean ISI is: 192 and the ISI SD is: 195.
+: 
+: 
+
+We could quickly check the detection as we did before with (figure not shown):
+
+#+NAME: DetectedSpikes-plot-example
+#+BEGIN_SRC python :session *Python* :eval no-export :results silent
+Spike.plot()
+plt.xlim([0,0.2])
+#+END_SRC
+
+We could look at the first 200 spikes with (figure not shown):
+
+#+NAME: DetectedSpikes-plot-example2
+#+BEGIN_SRC python :session *Python* :eval no-export :results silent
+Spike[:200].plot()
+#+END_SRC
+
+
+If we wanted to detect only from the first recording site we would use:
+
+#+NAME: DetectedSpikes-instanciation-example2
+#+BEGIN_SRC python :session *Python* :results output :exports both
+Spike0 = DetectedSpikes(Data,0,threshold=-3,filter_length=5) 
+print(Spike0)
+#+END_SRC
+
+#+RESULTS: DetectedSpikes-instanciation-example2
+: 
+: An instance of DetectedSpikes.
+:   Spikes were detected on 1 channels simultaneously ['ch09'].
+:   A box filter with length 5 was used.
+:   The detection threshold (multiple of the MAD) was set at -3.
+:   1253 putative spikes were detected. The smallest inter spike interval is: 16, and the largest is: 2381.
+:   The mean ISI is: 343 and the ISI SD is: 343.
+
+If we generate a plot =Spike0.plot()= at that stage, the four recording sites are going to be shown even if the detection was only done on the first.
+
+** Cuts and Sample Classes
+
+=Class Cuts= is designed to hold "cuts", that is portions of raw data including a given number of measurements before a reference point as well as,  in general, a different number of measurements after this reference point. When the data are multi channel data, a cut is made on all the channels at the indexes and all the cut are pasted one after the other in channel order. An instance of =Cuts= contains essentially a matrix whose rows are the successive cuts. The class provides facilities for extracting statistics (mean, median, mad, std, var), plotting, copying and subsetting. Instances of this class have the following attributes:
++ =cuts=: a matrix with the cuts.
++ =n_channels=: a positive integer, the number of recording channels.
++ =shape=: a tuple (number of events, cut length x number of channels).
++ =mean=: a vector, the mean cut.
++ =median=: a vector, the median cut.
++ =mad=: a vector, the mad of the cuts' sample.
++ =std=: a vector, the standard deviation of the cuts' sample.
++ =var=: a vector, the variance of the cuts' sample.
+
+#+NAME: Cuts-Class-definition
+#+BEGIN_SRC python :session *Python* :results silent
+class Cuts:
+    """A matrix of cuts from multi channel data."""
+    def __init__(self,cuts,n_channels=4):
+        """Create a new Cuts instance.
+
+        cuts        the matrix of cuts, individual cuts making 
+                    successive rows of the matrix
+        n_channels  a positive integer, the number of channels
+        """
+        import numpy as np
+        if not isinstance(cuts,np.ndarray):
+            raise TypeError('cuts must be an array')
+        if len(cuts.shape) == 1:
+            cuts.shape = (1,len(cuts))
+        if len(cuts.shape) > 2:
+            raise TypeError('cuts must be a matrix')
+        if not isinstance(n_channels,int) or n_channels <= 0:
+            raise TypeError('n_channels must be a positive integer')
+        if not cuts.shape[1]%n_channels == 0:
+            raise ValueError('n_channels should divide the number of columns of cuts')
+        self._cuts = cuts.copy()
+        self.n_channels = n_channels
+    @property
+    def cuts(self):
+        """Get the cuts."""
+        return self._cuts
+    @property
+    def shape(self):
+        """The shape."""
+        return self._cuts.shape
+    @property
+    def mean(self):
+        """Mean sample member."""
+        import numpy as np
+        return np.mean(self._cuts,axis=0)
+    @property
+    def median(self):
+        """Median sample member."""
+        import numpy as np
+        return np.median(self._cuts,axis=0)
+    @property
+    def mad(self):
+        """Sample's MAD."""
+        import numpy as np
+        return np.median(np.abs(self._cuts - self.median.reshape(1,self.shape[1])),axis=0)*1.4826
+    @property
+    def std(self):
+        """Sample's STD."""
+        import numpy as np
+        return np.std(self._cuts,axis=0)
+    @property
+    def var(self):
+        """Sample's variance."""
+        import numpy as np
+        return np.var(self._cuts,axis=0)
+    def __getitem__(self,key):
+        """Return a new subsetted instance."""
+        cuts = self._cuts[key]
+        return Cuts(cuts,self.n_channels)
+    def copy(self):
+        """Return a new instance that is a copy of the present one."""
+        return Cuts(self._cuts,self.n_channels)
+    def plot(self,events_color='black',events_lw=0.1,
+             show_median=True,median_color='red',
+             median_lw=1,show_mad=True,
+             mad_color='blue',mad_lw=1):
+        """Plot Cuts.
+
+        events_color color used for the events
+        events_lw    line width used for the events
+        show_median  should the median be shown
+        median_color color used for the median if shown
+        median_lw    line width used for the median if shown
+        show_mad     should the mad be shown
+        mad_color    color used for the mad if shown
+        mad_lw       line width used for the mad if shown
+        """
+        import numpy as np
+        import matplotlib.pylab as plt
+        cut_length = self.cuts.shape[1]//self.n_channels
+        plt.plot(self.cuts.T,color=events_color, lw=events_lw)
+        left_boundary = np.arange(cut_length,
+                                  self.shape[1],
+                                  cut_length*2)
+        for l in left_boundary:
+            plt.axvspan(l,l+cut_length-1,
+                        facecolor='grey',alpha=0.5,edgecolor='none')
+        if show_median:
+            plt.plot(self.median, color=median_color, lw=median_lw)
+        if show_mad:
+            plt.plot(self.mad+max(0,np.median(self.cuts)), color=mad_color, lw=mad_lw)
+            print('The MAD is displayed with an offset of: ' + str(max(0,np.median(self.cuts))))
+        plt.xticks([])
+        plt.xlim([0,self.shape[1]])
+        plt.ylim([np.min(self.cuts),np.max(self.cuts)])
+
+#+END_SRC 
+
+
+=Class= =Sample= is designed to contain the events' sample, that is a collection of cuts around each detected spikes. Instances of this class inherit from the =Cuts= class and have the following additional attributes:
++ =before=: a positive integer, the number of sampling points (within the cut) before the reference time.
++ =after=: a positive integer, the number of sampling points (within the cut) after the reference time---the cut length equals before+after+1, stated differently it goes from -before to after with the reference time set at 0.
++ =good_limits=: a dictionary with entries 'before' and 'after' giving the 'recommended' cut parameters based on the domain over which the events' sample MAD exceeds the full trace MAD.
+The following methods are available:
++ =plotM=: generates a plot with the events' sample median and the events' sample MAD to which the median has been added; this method is designed to guide a visual setting of the 'right' cut parameters 'before' and 'after'.
++ =plot=: generates a plot of the events with the events' sample median and MAD.
++ =good_events=: returns a Boolean vector whose elements are True for events 'close' enough to the median event and False otherwise. 
+A  =print= special method is defined returning a short written summary of the instance content and subsetting can be performed on the object like on a "classical" matrix.   
+
+#+NAME: Sample-Class-definition
+#+BEGIN_SRC python :session *Python* :results silent
+class Sample(Cuts):
+    """Events' sample: a collection of cuts around detected spikes."""
+    def __init__(self, DS_instance, before=14, after=30, cuts=None):
+        """Create a new Sample instance.
+
+        DS_instance a DetectedSpikes instance
+        before a positive integer specifying were the cut starts before the spike position
+        after  a positive integer specifying were the cut ends after the spike position
+        cuts   a matrix of cuts or None
+        """
+        import numpy as np
+        if not isinstance(DS_instance,DetectedSpikes):
+            raise TypeError('DS_instance must be a DetectedSpikes instance')
+        if not isinstance(before,int) or before <= 0:
+            raise TypeError('before must be a positive integer')
+        if not isinstance(after,int) or after <= 0:
+            raise TypeError('after must be a positive integer')
+        if not cuts is None and not isinstance(cuts,np.ndarray):
+            raise TypeError('cuts must be an array')
+        if cuts is None:
+            cuts = DS_instance.mk_cuts(before,after)
+        if not cuts.shape == (len(DS_instance),DS_instance._MCD.data.shape[0]*(before+after+1)):
+            raise ValueError('cuts must be a matrix with ' + str(len(DS_instance)) + ' rows and '\
+                             + str(DS_instance._MCD.data.shape[0]*(before+after+1)) + ' columns')
+        self._cuts = cuts
+        self.n_channels = DS_instance._MCD.data.shape[0]
+        self.before = before
+        self.after = after
+        self._DS = DS_instance
+    @property
+    def good_limits(self):
+        """An array with the limits within which the MAD is above 'noise' level."""
+        import numpy as np
+        n_channels = self.n_channels
+        cut_length = self.before + self.after + 1
+        MAD = self.mad / np.repeat(self._DS._MCD.mad,cut_length) # Normalize MAD of each channel
+        MAD.shape = (n_channels,cut_length) # make it a matrix
+        MAD = MAD >= 1.1 # get points with a MAD at least 10% greater than 'background noise'
+        ## Next find out the sample points where the above threshold is exceeded on at least
+        ## one channel
+        MAD = np.where(np.apply_along_axis(lambda x: np.any(x), 0 , MAD))[0]-self.before
+        MADd = np.array(list(np.diff(MAD))+[1]) ## We want contiguous sample points (so a diff of 1)
+        before = MAD[np.max(np.where(MADd[MAD<0]>1)[0])+1] if len(np.where(MADd[MAD<0]>1)[0]) > 0 else MAD[0]
+        after = MAD[np.min(np.where(MADd[MAD>=0]>1)[0])+np.sum(MAD<0)] if len(np.where(MADd[MAD>=0]>1)[0]) > 0 else MAD[-1]
+        return {'before': np.abs(before),
+                'after': after}
+    def __str__(self):
+        """Controls the printed version of the instance."""
+        import numpy as np
+        return "An instance of Sample.\n" \
+            "  The instance contains: " + str(self.shape[0]) + " events.\n" \
+            "  The cuts are: " + str(self.before+self.after+1) + " sampling points long.\n" \
+            "  The reference time is located at position " + str(self.before) + " within each cut (indexes start at 0).\n" 
+    def plotM(self,v_spacing=10,
+              median_color='red',median_lw=2,
+              mad_color='blue',mad_lw=2):
+        """Plot sample median and MAD."""
+        import numpy as np
+        import matplotlib.pylab as plt
+        n_channels = self._DS._MCD.data.shape[0]
+        cut_length = self.before + self.after + 1
+        plt.plot(self.median, color=median_color, lw=median_lw)
+        MAD = self.mad + np.repeat(self._DS._MCD.median,cut_length)
+        plt.plot(MAD, color=mad_color, lw=mad_lw)
+        left_boundary = np.arange(cut_length,
+                                  self.shape[1],
+                                  cut_length*2)
+        for l in left_boundary:
+            plt.axvspan(l,l+cut_length-1,
+                        facecolor='grey',alpha=0.5,edgecolor='none')
+        plt.ylim([np.min(self.median),max(list(self.median)+list(MAD))])
+        for i in np.arange(0,cut_length*n_channels,cut_length): 
+            plt.axvline(x=i, color='black', lw=2)
+        for i in np.arange(0,cut_length*n_channels,v_spacing): 
+            plt.axvline(x=i, color='black')
+    def __getitem__(self,key):
+        """Return a new subsetted instance."""
+        cuts = self._cuts[key]
+        return Sample(self._DS[key[0]],self.before,self.after,cuts)
+    def good_events(self,valley=True,upper_thr=3,lower_thr=None):
+        """Are individual events 'close enough' to the median event?
+
+        Parameters
+        ----------
+        valley      a boolean, is the salient event a valley (True) or a peak (False)?
+        upper_thr   a positive number, by how many time the MAD is the event allow to
+                    deviate from the median in the positive direction?
+        lower_thr   a negative number, by how many time the MAD is the event allow to
+                    deviate from the median in the negative direction? If None (default)
+                    lower_thr is set to -upper_thr
+
+        Returns
+        -------
+        A Boolean vector whose elements are True if the event is 'good' and False otherwise.
+
+        Details
+        -------
+        Deviations are look for in the region where the median is positive when valley
+        is True and where it is negative otherwise.
+        """
+        import numpy as np
+        from numpy import apply_along_axis as apply
+        if not isinstance(upper_thr,(int,float)) or upper_thr <= 0:
+            raise TypeError('upper_thr must be a positive number')
+        if lower_thr is None:
+            lower_thr = -upper_thr
+        if not isinstance(lower_thr,(int,float)) or lower_thr >= 0:
+            raise TypeError('lower_thr must be a negative number')
+        samp_med = self.median
+        samp_mad = self.mad
+        if valley:
+            remove = samp_med < 0
+        else:
+            remove = samp_med > 0
+        samp_r = self.cuts.copy()
+        for i in range(self.shape[0]): samp_r[i,remove] = 0
+        samp_med[remove] = 0
+        res = apply(lambda x:
+                    np.all((lower_thr <(x-samp_med)/samp_mad)*\
+                           ((x-samp_med)/samp_mad < upper_thr)),
+                    1,samp_r)
+        return res
+#+END_SRC
+
+*** Example of use
+
+We start with "long cuts" as we did previously to determine the "right" cut length:
+
+#+NAME: Sample-instanciation-and-print-example
+#+BEGIN_SRC python :session *Python* :exports both :results output 
+Evts = Sample(Spike,before=49,after=50)
+print(Evts)
+#+END_SRC
+
+#+RESULTS: Sample-instanciation-and-print-example
+: 
+: An instance of Sample.
+:   The instance contains: 2242 events.
+:   The cuts are: 100 sampling points long.
+:   The reference time is located at position 49 within each cut (indexes start at 0).
+
+We can get a plot with the median and MAD with (result not shown):
+
+#+NAME: Sample-plotM-example
+#+BEGIN_SRC python :session *Python* :eval no-export :results silent
+Evts.plotM()
+#+END_SRC
+
+We can also call the =good_limits= method in order to have an automatic "good" value for the parameters 'before' and 'after':
+
+#+NAME: Sample-good_limits-example
+#+BEGIN_SRC python :session *Python* :exports both
+Evts.good_limits
+#+END_SRC
+
+#+RESULTS: Sample-good_limits-example
+| after | : | 23 | before | : | 8 |
+
+We see that we get here a slightly tighter cut than we did previously with our visual setting. We then redo our cuts with these parameters:
+
+#+NAME: Sample-instanciation-and-print-example2
+#+BEGIN_SRC python :session *Python* :exports both :results output 
+Evts = Sample(Spike,before=8,after=23)
+print(Evts)
+#+END_SRC
+
+#+RESULTS: Sample-instanciation-and-print-example2
+: 
+: An instance of Sample.
+:   The instance contains: 2242 events.
+:   The cuts are: 32 sampling points long.
+:   The reference time is located at position 8 within each cut (indexes start at 0).
+
+The first 200 events can be visualized with:
+
+#+NAME: Sample-plot-example
+#+BEGIN_SRC python :session *Python* :results silent :eval no-export 
+Evts[:200,:].plot()
+#+END_SRC
+
+The =good_events= method is slightly more sophisticated than our previous function doing the same job since it potentially differentiates between positive and negative deviations. We can see its effect on the following graph where the first 500 good events are shown on the top and all the bad ones are shown at the bottom. We are using the fact that the complementary of a =numpy Boolean vector= is obtained by taking its opposite.
+
+#+NAME: Sample-good_events-example
+#+BEGIN_SRC python :session *Python* :results output :expors both
+plt.subplot(211)
+Evts[Evts.good_events(valley=True,upper_thr=10,lower_thr=-9),:][:500,:].plot()
+plt.subplot(212)
+Evts[-Evts.good_events(valley=True,upper_thr=10,lower_thr=-9),:].plot()
+#+END_SRC
+
+#+RESULTS: Sample-good_events-example
+: <matplotlib.axes._subplots.AxesSubplot object at 0x7f233ae1a3c8>
+: The MAD is displayed with an offset of: 2061.0
+: <matplotlib.axes._subplots.AxesSubplot object at 0x7f232e4e4550>
+: The MAD is displayed with an offset of: 2081.0
+
+#+NAME: Sample-good_events-example-fig
+#+BEGIN_SRC python :exports results :results file :session *Python*
+plt.savefig("img/Sample-good_events-example.png")
+plt.close()
+"img/Sample-good_events-example.png"
+#+END_SRC
+
+#+CAPTION: Example of use of =subsetting= and =good_events= methods for Sample objects.
+#+ATTR_LATEX: :width 1.0\textwidth
+#+NAME: fig:Sample-good_events-example
+#+RESULTS: Sample-good_events-example-fig
+[[file:img/Sample-good_events-example.png]]
+
+** Sample4Clust Class
+
+We define next a subclass of =Sample= that we call =Sample4Clust=. This class will contain a "clean" sub-sample of the events of the parent =Sample= instance. This clean sub-sample is obtained by calling method =good_events= of =Sample= instances; it is moreover normalized, that is, the median of each channel will be subtracted from the corresponding sample points of the events that will also be divided by the MAD of the channel. In addition to the attributes and methods of the Sample instances, instances of =Sample4Clust= have:
++ =u=, =s= and =v=: two unitary matrices (=u= and =v=) and a vector (=s=) returned by [[http://docs.scipy.org/doc/numpy/reference/generated/numpy.linalg.svd.html#numpy.linalg.svd][svd]], the =numpy.linalg= function performing singular value decomposition.
++ =cluster=: a vector of integers containing the label / cluster of origin of each element (row) of =cuts= attribute matrix; this vector is initialized at 0.
+The following methods are defined:
++ =plotPCA=: plots the mean event together with the mean event plus or minus a number multiplying a selected principal component; this is usual to grab what the different principal components are describing.
++ =project=: projects the events onto the principal components subspace specified by a user choice and return a matrix.
++ =csv=: writes the matrix obtained with method =project= to a file in =csv= format; the content of attribute =cluster= can be added as a column of this matrix; this file is suitable for visualization with [[http://www.ggobi.org/][GGobi]].
++ =find_clusters=: does unsupervised clustering with the kmeans or with a Gaussian mixture model fitted with the EM algorithm; the number of clusters is set by the user; attribute =cluster= is updated as a result and a short description of the result is printed to the standard output.
++ =merge_clusters=: merges two or more clusters specified by the user; attribute =cluster= is updated as a result.
++ =split_cluster=: splits a user specified cluster in a user specified number of clusters using the same algorithms as method =find_clusters=.
+
+#+NAME: Sample4Clust-Class-definition
+#+BEGIN_SRC python :session *Python* :results silent
+class Sample4Clust(Sample):
+    """Selected and normalized events from a Sample instance."""
+    def __init__(self,Sample_instance,valley=True,upper_thr=3,lower_thr=None):
+        """Create a new Sample instance.
+
+        valley      a boolean, is the salient event a valley (True) or a peak (False)?
+        upper_thr   a positive number, by how many time the MAD is the event allow to
+                    deviate from the median in the positive direction?
+        lower_thr   a negative number, by how many time the MAD is the event allow to
+                    deviate from the median in the negative direction? If None (default)
+                    lower_thr is set to -upper_thr
+        """
+        import numpy as np
+        from numpy.linalg import svd
+        if not isinstance(upper_thr,(int,float)) or upper_thr <= 0:
+            raise TypeError('upper_thr must be a positive number')
+        if lower_thr is None:
+            lower_thr = -upper_thr
+        if not isinstance(lower_thr,(int,float)) or lower_thr >= 0:
+            raise TypeError('lower_thr must be a negative number')
+        good = Sample_instance.good_events(valley=valley,upper_thr=upper_thr,lower_thr=lower_thr)
+        self._cuts = Sample_instance.cuts[good,:].copy()
+        self.n_channels = Sample_instance.n_channels
+        self._Sample = Sample_instance
+        self._DS = Sample_instance._DS[good]
+        self.before = Sample_instance.before
+        self.after = Sample_instance.after
+        self._valley = valley
+        self._upper_thr = upper_thr
+        self._lower_thr = lower_thr
+        MED = np.repeat(Sample_instance._DS._MCD.median,Sample_instance.before+Sample_instance.after+1)
+        MAD = np.repeat(Sample_instance._DS._MCD.mad,Sample_instance.before+Sample_instance.after+1)
+        self._cuts -= MED.reshape((1,self._cuts.shape[1]))
+        self._cuts /= MAD.reshape((1,self._cuts.shape[1]))
+        varcovmat = np.cov(self._cuts.T)
+        self.u, self.s, self.v = svd(varcovmat)
+        self.cluster = np.zeros(self._cuts.shape[0],dtype=np.int)
+    def copy(self):
+        """Return a new instance that is a copy of the present one."""
+        import numpy as np
+        new = Sample4Clust(Sample_instance=self._Sample,
+                           valley=self._valley,
+                           upper_thr=self._upper_thr,
+                           lower_thr=self._lower_thr)
+        new.cluster = self.cluster.copy()
+        return new
+    def __getitem__(self,key):
+        """Return a new subsetted instance."""
+        new = self.copy()
+        new._cuts = new._cuts[key]
+        new.cluster = new.cluster[key]
+        return new
+    def __str__(self):
+        """Controls the printed version of the instance."""
+        import numpy as np
+        nb_total = self.shape[0]
+        blabla = "An instance of Sample4Clust.\n" \
+          "  The instance contains: " + str(nb_total) + " events.\n" \
+          "  The cuts are: " + str(self.before+self.after+1) + " sampling points long.\n" \
+          "  The reference time is located at position " + str(self.before) + " within each cut (indexes start at 0).\n"
+        if (np.max(self.cluster) > 0):
+            blabla += "  The number of events of each cluster (percent of events):\n"
+            blabla += "\n".join(["    Cluster " + str(i) + ": " + str(sum(self.cluster==i)) \
+                       + "  (" + str(round(100*sum(self.cluster==i)/nb_total,1)) + "%)" \
+                       for i in range(np.max(self.cluster)+1)])
+        return blabla  
+    def plotPCA(self,component=0,factor=5,lw=2):
+        """Plot Mean +/- factor x Principal Component."""
+        import numpy as np
+        import matplotlib.pylab as plt
+        n_channels = self._DS._MCD._data.shape[0]
+        cut_length = self.before + self.after + 1
+        plt.plot(self.mean,color='black',lw=lw)
+        PC = self.u[:,component]
+        plt.plot(self.mean + factor*PC, color='red',lw=lw)
+        plt.plot(self.mean - factor*PC, color='blue',lw=lw)
+        plt.title('PC' + str(component) + ': ' + str(round(self.s[component]/sum(self.s)*100)) +'%')
+        left_boundary = np.arange(cut_length,
+                                  self.shape[1],
+                                  cut_length*2)
+        for l in left_boundary:
+            plt.axvspan(l,l+cut_length-1,
+                        facecolor='grey',alpha=0.5,edgecolor='none')
+    def project(self,components=slice(4)):
+        """Project events onto principal components (or other an other vectors set) subspace specified by components.
+        
+        components either a slice specifying the Principal components to use or a matrix
+                   with as many rows as 'the cut length x number of channels' and as
+                   many columns as the desired subspace dimension.
+        """
+        import numpy as np
+        if isinstance(components,np.ndarray):
+            if len(components.shape) > 2:
+                raise ValueError('components must have dimension 1 or 2')
+            if components.shape[0] != self.u.shape[0]:
+                raise ValueError('components must have ' + str(self.u.shape[0]) + ' rows')
+            return np.dot(self.cuts,components)
+        else:
+            return np.dot(self.cuts,self.u[:,components])
+    def csv(self,filename,components=slice(4),include_cluster=False):
+        """Write projected events into file in csv format optionnaly including cluster membership.
+
+        filename         the name of the file into which data will be stored
+        components       the principle components onto which to project
+        include_cluster  should the cluster attribute be included?
+        """
+        import csv
+        import numpy as np
+        g = open(filename,'w')
+        w = csv.writer(g)
+        if include_cluster:
+            w.writerows(np.concatenate((self.project(components),
+                                        np.array([self.cluster]).T),
+                                       axis=1))
+        else:
+            w.writerows(self.project(components))
+        g.close()
+    @property
+    def _order_clusters(self):
+        """Order clusters acording to the L1 norm of their median."""
+        import numpy as np
+        from numpy import apply_along_axis as apply
+        nb_clusters = np.max(self.cluster)+1
+        cluster_median = list([(i,
+                                apply(np.median,0,
+                                      self.cuts[self.cluster == i,:]))
+                               for i in range(nb_clusters)
+                               if sum(self.cluster == i) > 0])
+        cluster_size = list([np.sum(np.abs(x[1])) for x in cluster_median])
+        new_order = list(reversed(np.argsort(cluster_size)))
+        new_order_reverse = sorted(range(len(new_order)), key=new_order.__getitem__)
+        self.cluster = np.array([new_order_reverse[i] for i in self.cluster],dtype=np.int)
+    def _do_kmeans(self,proj,n,init='k-means++', n_init=100, max_iter=100):
+        """Do kmeans clustering of proj with n clusters."""
+        import numpy as np
+        from sklearn.cluster import KMeans
+        km = KMeans(n_clusters=n,init=init, max_iter=max_iter,n_init=n_init)
+        km.fit(proj)
+        return km.fit_predict(proj)
+    def _do_em4gmm(self,proj,n,n_init=20,covariance_type='full'):
+        """Do GMM with EM clustering of proj with n clusters."""
+        import numpy as np
+        from sklearn import mixture
+        gogo = mixture.GMM(n_components=n,covariance_type=covariance_type,n_init=n_init)
+        gogo.fit(proj)
+        return gogo.predict(proj)
+    def find_clusters(self,nb_clusters,method='kmeans',components=slice(4),n_init=100):
+        """Unsupervised clustering with nb_clusters on a projected version of the events.
+
+        Parameters
+        ----------
+        nb_clusters  an integer > 1, the number of clusters
+        method       a string 'kmeans' or 'EM4GMM' (E-M algorithm for Gaussian mixture model),
+                     the clustering procedure to use.
+        components   the principle components onto which to project or a matrix whose columns
+                     are the vectors defining the subspace onto which to project.
+        n_init       number of different initial partitions used to run the clustering algorithms
+        
+        Side effect
+        -------
+        Attribute cluster is updated.
+        """
+        import numpy as np
+        if not isinstance(nb_clusters,int) or nb_clusters <= 1:
+            raise TypeError('nb_clusters must be an integer > 1.')
+        if not method in ['kmeans','EM4GMM']:
+            raise ValueError('method must be either \'kmeans\' for kmeans or\n\'EM4GMM\' for E-M based clustering with a Gaussian mixture.')
+        proj = self.project(components)
+        if method == 'kmeans':
+            self.cluster=self._do_kmeans(proj,nb_clusters,init='k-means++', n_init=n_init, max_iter=100)
+        else:
+            self.cluster = self._do_em4gmm(proj,nb_clusters,n_init=n_init,covariance_type='full')
+        self._order_clusters
+        print("Number of events of each cluster (percent of events):")
+        nb_total = self._cuts.shape[0]
+        for i in range(nb_clusters):
+            nb_evts = sum(self.cluster==i)
+            pct_evts = round(100*nb_evts/nb_total,1)
+            if i < 10:
+                print("Cluster  " + str(i) + ": " + str(nb_evts) + "  (" + str(pct_evts) + "%)")
+            else:
+                print("Cluster " + str(i) + ": " + str(nb_evts) + "  (" + str(pct_evts) + "%)")
+        print("Total number of events: " + str(nb_total))
+    def merge_clusters(self,cluster2merge):
+        """Merge clusters whose numbers are in list cluster2merge."""
+        import numpy as np
+        if not isinstance(cluster2merge,list):
+            raise TypeError('cluster2merge should be a list')
+        if not all([x in range(np.max(self.cluster)) for x in cluster2merge]):
+            raise ValueError('cluster2merge should be a list of integers between 0 and ' + str(np.max(self.cluster)))
+        cluster2merge.sort()
+        new_numbers = list(range(np.max(self.cluster)+1-len(cluster2merge)+1))
+        for i in range(1,len(cluster2merge)):
+            new_numbers.insert(cluster2merge[i],cluster2merge[0])
+        for i in range(np.max(self.cluster)+1):
+            self.cluster[self.cluster==i] = new_numbers[i]
+        self._order_clusters
+    def split_cluster(self,cluster2split=0,split_into=2,method='kmeans',components=slice(4),n_init=100):
+        """Unsupervised clustering with split_into on a projected version of the events belonging to cluster cluster2split.
+
+        Parameters
+        ----------
+        cluster2split a positive integer, the cluster to split
+        split_into    an integer > 1, the number of clusters to split into
+        method        a string 'kmeans' or 'EM4GMM' (E-M algorithm for Gaussian mixture model),
+                      the clustering procedure to use.
+        components    the principle components onto which to project
+        n_init        number of different initial partitions used to run the clustering algorithms
+        
+        Side effect
+        -------
+        Attribute cluster is updated.
+        """
+        import numpy as np
+        if not isinstance(cluster2split,int) or not cluster2split in range(max(self.cluster)+1):
+            raise ValueError('cluster2split must be an integer between 0 and ' + str(max(self.cluster)))
+        if not isinstance(split_into,int) or split_into <= 1:
+            raise TypeError('split_into must be an integer > 1.')
+        if not method in ['kmeans','EM4GMM']:
+            raise ValueError('method must be either \'kmeans\' for kmeans or\n\'EM4GMM\' for E-M based clustering with a Gaussian mixture.')
+        proj = self.project(components)[self.cluster == cluster2split,:]
+        if method == 'kmeans':
+            subcluster = self._do_kmeans(proj,split_into,init='k-means++', n_init=n_init, max_iter=100)
+        else:
+            subcluster = self._do_em4gmm(proj,split_into,n_init)
+        print("Number of events of each sub-cluster (percent of events) of cluster " + str(cluster2split) +":")
+        nb_total = sum(self.cluster  == cluster2split)
+        for i in range(split_into):
+            nb_evts = sum(subcluster==i)
+            pct_evts = round(100*nb_evts/nb_total,1)
+            if i < 10:
+                print("Sub-cluster  " + str(i) + ": " + str(nb_evts) + "  (" + str(pct_evts) + "%)")
+            else:
+                print("Sub-cluster " + str(i) + ": " + str(nb_evts) + "  (" + str(pct_evts) + "%)")
+        print("Total number of events: " + str(nb_total))
+        gidx = np.arange(len(self.cluster))[self.cluster == cluster2split]
+        nb_total = np.max(self.cluster)
+        for i in range(1,split_into):
+            self.cluster[gidx[subcluster == i]] = nb_total+i 
+        self._order_clusters
+    def catalogue(self,before=49,after=50):
+        """Create a dictionary of clusters' centers and of their first two derivatives.
+
+        Parameters
+        ----------
+        before  a postive integer, the number of point to keep before the reference time.
+        after   a postive integer, the number of point to keep after the reference time.
+
+        Returns
+        -------
+        A dictionary of dictionaries with one sub-dictionary per cluster, each of those
+        containing three vectors, named 'center' (median), 'centerD' (median of the first
+        derivative), and 'centerDD' (median of the second derivative) for each cluster,
+        values of parameters 'before' and 'after' are also stored as entries of the top
+        dictionary.
+        A elementary check that the centers came back to baseline on the edges of cuts is
+        also performed and its result is printed to the standard output.
+        """
+        ds = self._DS
+        cut_length = before+after+1
+        critical_points = sorted(list(range(0,self.n_channels*cut_length,cut_length))\
+                                 + list(range(cut_length-1,(self.n_channels+1)*cut_length-1,cut_length)))
+        dsD = DetectedSpikes(self._DS._MCD.derivative,spike_positions=self._DS.spike_positions)
+        dsDD = DetectedSpikes(self._DS._MCD.derivative.derivative,spike_positions=self._DS.spike_positions)
+        samp = Sample(self._DS, before=before,after=after)
+        sampD = Sample(dsD, before=before,after=after)
+        sampDD = Sample(dsDD, before=before,after=after)
+        result = {'before':before,'after':after}
+        for i in range(np.max(self.cluster)+1):
+            center = samp[self.cluster==i,:].median - np.repeat(self._DS._MCD.median,cut_length)
+            error = samp[self.cluster==i,:].mad[critical_points]/np.sqrt(sum(self.cluster==i))
+            if np.all(np.abs(center[critical_points])/error < 3):
+                print('Cluster ' + str(i) + ' center is back to baseline with the parameter used.')
+            else:
+                print('Cluster ' + str(i) + ' center is NOT back to baseline with the parameter used.')
+            centerD = sampD[self.cluster==i,:].median
+            centerDD = sampDD[self.cluster==i,:].median
+            result.update({'Cluster '+str(i):{'center':center,'centerD':centerD,'centerDD':centerDD}})
+        return result
+#+END_SRC
+
+*** Example of use
+
+We get a 'clean and normalized' version of our previous =Evts= with:
+
+#+NAME: Sample4Clust-instanciation-example
+#+BEGIN_SRC python :session *Python* :results output :exports both
+EvtsG = Sample4Clust(Evts,valley=True,upper_thr=10,lower_thr=-9)
+print(EvtsG)
+#+END_SRC
+
+#+RESULTS: Sample4Clust-instanciation-example
+: 
+: An instance of Sample4Clust.
+:   The instance contains: 2219 events.
+:   The cuts are: 32 sampling points long.
+:   The reference time is located at position 8 within each cut (indexes start at 0).
+
+We can then make a figure displaying the first 4 principal components as we did before with:
+
+#+NAME: Sample4Clust-plotPCA-example
+#+BEGIN_SRC python :session *Python* :results silent
+for i in range(4):
+    plt.subplot(2,2,i+1)
+    EvtsG.plotPCA(i)
+#+END_SRC
+
+To construct a matrix of scatter plots with the events projected on the first principal components we use:
+
+#+NAME: Sample4Clust-project-etc-example
+#+BEGIN_SRC python :session *Python* :results silent
+from pandas.tools.plotting import scatter_matrix
+import pandas as pd
+df = pd.DataFrame(EvtsG.project([0,1,2,3]))
+scatter_matrix(df,alpha=0.2,s=4,c='k',figsize=(6,6),
+               diagonal='kde',marker=".")
+#+END_SRC
+
+We can then write the events projected onto the sub-space defined by the first 4 principal components with:
+
+#+NAME: Sample4Clust-csv-example1
+#+BEGIN_SRC python :session *Python* :results silent
+EvtsG.csv('EvtsG.csv',components=range(4))
+#+END_SRC
+
+A clustering with 7 clusters using the kmeans algorithm (the default) and the events projected onto the first 4 PCs (the default) is done with:
+
+#+NAME: Sample4Clust-find_clusters-example
+#+BEGIN_SRC python :session *Python* :results output :exports both
+EvtsG.find_clusters(7)
+#+END_SRC
+
+#+RESULTS: Sample4Clust-find_clusters-example
+: Number of events of each cluster (percent of events):
+: Cluster  0: 58  (2.6%)
+: Cluster  1: 281  (12.7%)
+: Cluster  2: 122  (5.5%)
+: Cluster  3: 79  (3.6%)
+: Cluster  4: 577  (26.0%)
+: Cluster  5: 396  (17.8%)
+: Cluster  6: 706  (31.8%)
+: Total number of events: 2219
+
+To build a plot with the events of the different clusters as we did before we call:
+
+#+NAME: Sample4Clust-plot-example1
+#+BEGIN_SRC python :session *Python* :results silent
+for i in range(4):
+    plt.subplot(4,1,i+1)
+    EvtsG[EvtsG.cluster==i].plot()
+    plt.ylim([-20,15])
+#+END_SRC
+
+The last three clusters are displayed with:
+
+#+NAME: Sample4Clust-plot-example2
+#+BEGIN_SRC python :session *Python* :results silent
+for i in range(3):
+    plt.subplot(3,1,i+1)
+    EvtsG[EvtsG.cluster==i+4].plot()
+    plt.ylim([-10,5])
+#+END_SRC
+
+We can trys to split cluster 1 into 2 clusters since some events in this cluster exhibit a pronounced early peak on the second recording site (site 1 since numbering starts at 0) using the kmeans with:
+
+#+NAME: Sample4Clust-split_cluster-example
+#+BEGIN_SRC python :session *Python* :results output :exports both
+EvtsG.split_cluster(1,2)
+#+END_SRC
+
+#+RESULTS: Sample4Clust-split_cluster-example
+: Number of events of each sub-cluster (percent of events) of cluster 1:
+: Sub-cluster  0: 149  (53.0%)
+: Sub-cluster  1: 132  (47.0%)
+: Total number of events: 281
+
+#+NAME: Sample4Clust-print-example1
+#+BEGIN_SRC python :session *Python* :results output :exports both
+print(EvtsG)
+#+END_SRC
+
+#+RESULTS: Sample4Clust-print-example1
+#+begin_example
+An instance of Sample4Clust.
+  The instance contains: 2219 events.
+  The cuts are: 32 sampling points long.
+  The reference time is located at position 8 within each cut (indexes start at 0).
+  The number of events of each cluster (percent of events):
+    Cluster 0: 58  (2.6%)
+    Cluster 1: 149  (6.7%)
+    Cluster 2: 132  (5.9%)
+    Cluster 3: 122  (5.5%)
+    Cluster 4: 79  (3.6%)
+    Cluster 5: 577  (26.0%)
+    Cluster 6: 396  (17.8%)
+    Cluster 7: 706  (31.8%)
+#+end_example
+
+But a plot of the two new clusters, 1 and 2 shows that we did not obtain what we wanted since the new cluster 2 exhibits a mixture of the 2 types of events (with and without an early peak on site 1):
+
+#+NAME: Sample4Clust-plot-example3
+#+BEGIN_SRC python :session *Python* :results silent
+for i in range(1,3):
+    plt.subplot(2,1,i)
+    EvtsG[EvtsG.cluster==i].plot()
+    plt.ylim([-20,15])
+#+END_SRC
+
+Before going further we step back and merge the two clusters (1 and 2):
+
+#+NAME: Sample4Clust-merge_clusters-example
+#+BEGIN_SRC python :session *Python* :results silent
+EvtsG.merge_clusters([1,2])
+#+END_SRC
+
+Now if we make a plot of cluster 1 and zoom on site 1, we see that the two waveform differ most at point 35, 36 and 37 (the orange vertical lines):
+
+#+NAME: Sample4Clust-plot-example4
+#+BEGIN_SRC python :session *Python* :results silent
+EvtsG[EvtsG.cluster==1].plot()
+plt.xlim([32,63])
+plt.axvline(35,lw=2,color='orange')
+plt.axvline(36,lw=2,color='orange')
+plt.axvline(37,lw=2,color='orange')
+plt.ylim([-20,15])
+#+END_SRC
+
+So we can try splitting cluster 1 again into two cluster but projecting the sample onto a subspace defined by the units vectors of dimensions 35, 36 and 37 (this amounts to selecting the amplitude at those points only). We do this as follows, exploiting the fact that the =project= method of =Sample4Clust= instances allows us to select either principal components or to give a matrix whose column space spans the subspace we want to project onto. So we do:
+
+#+NAME: Sample4Clust-split_cluster-example2
+#+BEGIN_SRC python :session *Python* :results output :exports both
+my_sub_space = np.zeros((128,3))
+my_sub_space[35,0]=1
+my_sub_space[36,1]=1
+my_sub_space[37,2]=1
+EvtsG.split_cluster(cluster2split=1,split_into=2,method='kmeans',components=my_sub_space)
+#+END_SRC
+
+#+RESULTS: Sample4Clust-split_cluster-example2 
+: 
+: 
+: 
+: 
+: Number of events of each sub-cluster (percent of events) of cluster 1:
+: Sub-cluster  0: 26  (9.3%)
+: Sub-cluster  1: 255  (90.7%)
+: Total number of events: 281
+
+#+NAME: Sample4Clust-print-example2
+#+BEGIN_SRC python :session *Python* :results output :exports both
+print(EvtsG)
+#+END_SRC
+
+#+RESULTS: Sample4Clust-print-example2
+#+begin_example
+An instance of Sample4Clust.
+  The instance contains: 2219 events.
+  The cuts are: 32 sampling points long.
+  The reference time is located at position 8 within each cut (indexes start at 0).
+  The number of events of each cluster (percent of events):
+    Cluster 0: 26  (1.2%)
+    Cluster 1: 58  (2.6%)
+    Cluster 2: 255  (11.5%)
+    Cluster 3: 122  (5.5%)
+    Cluster 4: 79  (3.6%)
+    Cluster 5: 577  (26.0%)
+    Cluster 6: 396  (17.8%)
+    Cluster 7: 706  (31.8%)
+#+end_example
+
+We see that former cluster 1 has be split into new clusters 0, and 2. A plot of those shows that the two waveform differ not only by the presence or absence of an early peak on site 1, but also on the shape of their valleys on this site:
+
+#+BEGIN_SRC python :session *Python* :results silent
+plt.subplot(2,1,1)
+EvtsG[EvtsG.cluster==0].plot()
+plt.ylim([-15,15])
+plt.subplot(2,1,2)
+EvtsG[EvtsG.cluster==2].plot()
+plt.ylim([-15,15])
+#+END_SRC
+
+We can also draw on the same graph all the events of cluster 2 (in black) and all the events of cluster 0 (in orange) with:
+
+#+NAME: Sample4Clust-plot-example3
+#+BEGIN_SRC python :session *Python* :results silent
+EvtsG[EvtsG.cluster==2].plot(show_median=False,show_mad=False)
+EvtsG[EvtsG.cluster==0].plot(events_color='orange',show_median=False,show_mad=False)
+plt.ylim([-15,15])
+#+END_SRC
+
+We can then (if we are happy with the clustering) get the "waveform catalogue" needed for classification using method =catalogue=, first with the default parameters:
+
+#+NAME: Sample4Clust-catalogue-example1
+#+BEGIN_SRC python :session *Python* :results output :exports both
+center_catalogue = EvtsG.catalogue()
+#+END_SRC
+
+#+RESULTS: Sample4Clust-catalogue-example1
+: Cluster 0 center is NOT back to baseline with the parameter used.
+: Cluster 1 center is NOT back to baseline with the parameter used.
+: Cluster 2 center is NOT back to baseline with the parameter used.
+: Cluster 3 center is NOT back to baseline with the parameter used.
+: Cluster 4 center is back to baseline with the parameter used.
+: Cluster 5 center is back to baseline with the parameter used.
+: Cluster 6 center is back to baseline with the parameter used.
+: Cluster 7 center is back to baseline with the parameter used.
+
+We see that the first four clusters are not back to baseline so we take more points after the reference time with:
+
+#+NAME: Sample4Clust-catalogue-example2
+#+BEGIN_SRC python :session *Python* :results output :exports both
+center_catalogue = EvtsG.catalogue(after=80)
+#+END_SRC
+
+#+RESULTS: Sample4Clust-catalogue-example2
+: Cluster 0 center is back to baseline with the parameter used.
+: Cluster 1 center is back to baseline with the parameter used.
+: Cluster 2 center is back to baseline with the parameter used.
+: Cluster 3 center is back to baseline with the parameter used.
+: Cluster 4 center is back to baseline with the parameter used.
+: Cluster 5 center is back to baseline with the parameter used.
+: Cluster 6 center is back to baseline with the parameter used.
+: Cluster 7 center is back to baseline with the parameter used.
+
+Trying to play also with =before= (to make it smaller than the default, 49) or to reduce =after= leads to the initial situation (failure to reach baseline on the edges) so we keep it that way.
+
+** Sorted class
+
+We define now our "main" class, =Sorted=. Instances of this class are made mainly of two components:
+1. A reference to a =MultiChannelData= instance, the data to which spike sorting is applied.
+2. A "model" that means here /the combination of a catalog/, as returned by the =catalogue= method of the =Sample4Clust= class, /and labeled times/---the spike times together with the neuron of origin---; given such a model it is possible to construct ideal data or a /prediction/---by putting the right waveform at the right time---as well as a /residual/---the actual data minus the prediction.
+  
+#+NAME: Sorted-class-definition
+#+BEGIN_SRC python :session *Python* :results silent
+class Sorted:
+    """Spike Sorting of a given MultiChannelData instance."""
+    def __init__(self,MCD_instance,catalogue,sorting=None):
+        """Create a new Sorted instance.
+
+        MCD_instance  a MultiChannelData instance.
+        catalogue     a waveform catalog returned by method catalogue of
+                      class Sample4Clust.
+        sorting       an N x 3 integer array where N is the number of spikes
+                      the first column contains the neuron of origin of the 
+                      spike (-1 means that the origin is undetermined), the second
+                      column contains the closest sampling point
+                      and the third the 1000th of the difference between
+                      the closest and the 'actual' position. If None (default)
+                      a dummy array is created containing a single unclassified
+                      event at the beginning.
+        """
+        import numpy as np
+        if not isinstance(MCD_instance, MultiChannelData):
+            raise TypeError('MCD_instance must be a MultiChannelData instance')
+        if not isinstance(catalogue,dict):
+            raise TypeError('catalogue must be a dictionary')
+        if not 'before' in catalogue.keys() \
+           or not isinstance(catalogue['before'],int)\
+           or catalogue['before'] <= 0:
+            raise ValueError('item before of catalogue should be a positive integer')
+        if not 'after' in catalogue.keys() \
+           or not isinstance(catalogue['after'],int)\
+           or catalogue['after'] <= 0:
+            raise ValueError('Item after of catalogue should be a positive integer')
+        self.nb_neurons = len(catalogue.keys())-2
+        for i in range(self.nb_neurons):
+            if not 'Cluster ' + str(i) in catalogue.keys():
+                raise ValueError('catalogue should have a \'Cluster ' + str(i) + '\' item')
+            if set(catalogue['Cluster '+str(i)].keys()) != set(['center','centerD','centerDD']):
+                raise ValueError('Item Cluster ' + str(i) + ' does not have  all of center, centerD, centerDD items')
+        if sorting is None:
+            sorting = np.zeros((1,3),dtype=np.int)
+            sorting[0,0] = -1
+        if not isinstance(sorting, np.ndarray):
+            raise TypeError('sorting must be a numpy.ndarray')
+        if len(sorting.shape) != 2:
+            raise ValueError('sorting should be a matrix')
+        if sorting.shape[1] != 3:
+            raise ValueError('sorting should be a matrix with 3 columns')
+        if np.max(sorting[:,0]) >= self.nb_neurons:
+            raise ValueError('sorting first column content is not compatible with catalogue, the former has too many neurons')
+        if np.min(sorting[:,0]) < -1:
+            raise ValueError('sorting first column elements should be >= -1')
+        if np.any(sorting[:,1] < 0):
+            raise ValueError('Elements of the second column of sorting must be positive')
+        if np.any(sorting[:,1] >= len(MCD_instance)):
+            raise ValueError('Elements of the second column of sorting must smaller than ' + str(len(MCD_instance)))
+        if np.any(sorting[:,2] < -999):
+            raise ValueError('Elements of the third column of sorting must be larger than -1000')
+        if np.any(sorting[:,2] > 999):
+            raise ValueError('Elements of the third column of sorting must be smaller than 1000')
+        self.before = catalogue['before']
+        self.after = catalogue['after']
+        originalMAD = np.repeat(MCD_instance.mad,self.before+self.after+1)
+        self.catalogue = {'Cluster '+str(i):{'center':catalogue['Cluster ' + str(i)]['center'][:]/originalMAD,
+                                             'centerD':catalogue['Cluster ' + str(i)]['centerD'][:]/originalMAD,
+                                             'centerDD':catalogue['Cluster ' + str(i)]['centerDD'][:]/originalMAD}
+                          for i in range(self.nb_neurons)}
+        self._MCD = MCD_instance.normalize
+        self.sorting = sorting.copy()
+        self.centersM = np.array([self.catalogue['Cluster '+str(i)]["center"] for i in range(self.nb_neurons)])
+    def _cut_sgl_evt(self,evt_pos):
+        """Make a cut from the raw data 'centered' on evt_pos and return a vector.
+
+        evt_pos  the spike position
+        """
+        import numpy as np
+        ns,dl = self._MCD.data.shape
+        cl = self.before+self.after+1 ## The length of the cut
+        cs = cl*ns ## The 'size' of a cut
+        cut = np.zeros((ns,cl))
+        idx = np.arange(-self.before,self.after+1)
+        keep = idx + evt_pos
+        within = np.bitwise_and(0 <= keep, keep < self._MCD.data.shape[1])
+        kw = keep[within]
+        cut[:,within] = self._MCD.data[:,kw].copy()
+        return cut.reshape(cs)
+    def _classify_and_align_evt(self,evt_pos):
+        """Compares a single event to a dictionary of centers and returns
+        the name of the closest center if it is close enough or '?', the
+        corrected peak position and the remaining jitter.
+    
+        Parameters
+        ----------
+        evt_pos : a sampling point at which an event was detected.
+    
+        Returns
+        -------
+        A list with the following components:
+        The nunmber of the closest center if it was close enough or -1.
+        The nearest sampling point to the events peak.
+        The 1000th of the jitter: difference between the estimated 
+        actual peak position and the nearest sampling point.
+        """
+        evt = self._cut_sgl_evt(evt_pos)
+        delta = -(self.centersM - evt)
+        cluster_idx = np.argmin(np.sum(delta**2,axis=1))    
+        good_cluster_name = 'Cluster ' + str(cluster_idx)
+        centerD = self.catalogue[good_cluster_name]["centerD"]
+        centerD_norm2 = np.dot(centerD,centerD)
+        centerDD = self.catalogue[good_cluster_name]["centerDD"]
+        centerDD_norm2 = np.dot(centerDD,centerDD)
+        centerD_dot_centerDD = np.dot(centerD,centerDD)
+        h = delta[cluster_idx,:]
+        h_order0_norm2 = sum(h**2)
+        h_dot_centerD = np.dot(h,centerD)
+        jitter0 = h_dot_centerD/centerD_norm2
+        h_order1_norm2 = sum((h-jitter0*centerD)**2)     
+        if h_order0_norm2 > h_order1_norm2:
+            h_dot_centerDD = np.dot(h,centerDD)
+            first = -2*h_dot_centerD + \
+              2*jitter0*(centerD_norm2 - h_dot_centerDD) + \
+              3*jitter0**2*centerD_dot_centerDD + \
+              jitter0**3*centerDD_norm2
+            second = 2*(centerD_norm2 - h_dot_centerDD) + \
+              6*jitter0*centerD_dot_centerDD + \
+              3*jitter0**2*centerDD_norm2
+            jitter1 = jitter0 - first/second
+            h_order2_norm2 = sum((h-jitter1*centerD-jitter1**2/2*centerDD)**2)
+            if h_order1_norm2 <= h_order2_norm2:
+                jitter1 = jitter0
+        else:
+            jitter1 = 0
+        if abs(round(jitter1)) > 0:
+            evt_pos -= int(round(jitter1))
+            evt = self._cut_sgl_evt(evt_pos)
+            h = evt - self.catalogue[good_cluster_name]["center"]
+            h_order0_norm2 = sum(h**2)
+            h_dot_centerD = np.dot(h,centerD)
+            jitter0 = h_dot_centerD/centerD_norm2
+            h_order1_norm2 = sum((h-jitter0*centerD)**2)       
+            if h_order0_norm2 > h_order1_norm2:
+                h_dot_centerDD = np.dot(h,centerDD)
+                first = -2*h_dot_centerD + \
+                  2*jitter0*(centerD_norm2 - h_dot_centerDD) + \
+                  3*jitter0**2*centerD_dot_centerDD + \
+                  jitter0**3*centerDD_norm2
+                second = 2*(centerD_norm2 - h_dot_centerDD) + \
+                  6*jitter0*centerD_dot_centerDD + \
+                  3*jitter0**2*centerDD_norm2
+                jitter1 = jitter0 - first/second
+                h_order2_norm2 = sum((h-jitter1*centerD-jitter1**2/2*centerDD)**2)
+                if h_order1_norm2 <= h_order2_norm2:
+                    jitter1 = jitter0
+            else:
+                jitter1 = 0
+        if sum(evt**2) > sum((h-jitter1*centerD-jitter1**2/2*centerDD)**2):
+            return [cluster_idx, evt_pos, int(round(jitter1*1000))]
+        else:
+            return [-1,evt_pos, int(round(jitter1*1000))]
+    def spike_train(self,neuron):
+        """Get spike train of neuron."""
+        import numpy as np
+        if not isinstance(neuron, int):
+            raise TypeError('neuron must be an integer')
+        if not neuron in range(-1,self.nb_neurons):
+            raise ValueError('neuron should be between -1 and ' + str(self.nb_neurons-1))
+        return self._MCD.start + (self.sorting[self.sorting[:,0]==neuron,1]+\
+                                  self.sorting[self.sorting[:,0]==neuron,2]/1000)/self._MCD.sampling_rate
+    @property
+    def original(self):
+        """Original data."""
+        return self._MCD
+    @property
+    def predict(self):
+        """Get prediction or ideal data."""
+        import numpy as np
+        res = np.zeros(self._MCD.data.shape)
+        data_length = len(self._MCD)
+        ref_idx = np.arange(-self.before,self.after)
+        for i in range(self.sorting.shape[0]):
+            cluster_idx = self.sorting[i,0]
+            if cluster_idx != -1:
+                cluster_name = 'Cluster ' + str(cluster_idx)
+                center = self.catalogue[cluster_name]["center"]
+                centerD = self.catalogue[cluster_name]["centerD"]
+                centerDD = self.catalogue[cluster_name]["centerDD"]
+                jitter = self.sorting[i,2]/1000
+                pred = center + jitter*centerD + jitter**2/2*centerDD
+                pred = pred.reshape((self._MCD.nb_channels,len(center)//self._MCD.nb_channels))
+                idx = ref_idx + self.sorting[i,1] 
+                within = np.bitwise_and(0 <= idx, idx < data_length)
+                kw = idx[within]
+                res[:,kw] += pred[:,within]
+        return MultiChannelData(res.astype(self._MCD.data.dtype),self._MCD.channel_names,self._MCD.start,self._MCD.sampling_rate)
+    @property
+    def residual(self):
+        """Original data minus prediction."""
+        return self.original - self.predict
+    def single_peel(self,channels4detection=None,filter_length=3,threshold=-4,minimal_dist=15,not_zero=1e-3):
+        """Detect and classify events on present residuals and update sorting attribute.
+
+        Parameters
+        ----------
+        channels4detection the channels used for detection
+        threshold          a number, the mutiple of the MAD beyond which extrema are recorded 
+                           (positive for peaks, negative for valleys)
+        filter_length      a positive integer setting the length of the box filter used to 
+                           filter the data prior to detection
+        minimal_dist       a positive integer, the minimal distance between two successive peaks
+        not_zero           a positive float, the smallest value above which the absolute value of
+                           the derivative is considered not null.
+        """
+        if not isinstance(threshold,(int,float)):
+            raise TypeError('threshold must be a number')
+        if not isinstance(filter_length,int) or filter_length <= 0:
+            raise TypeError('filter_length must be a positive integer')
+        if not isinstance(minimal_dist,int) or minimal_dist <= 0:
+            raise TypeError('minimal_dist must be a positive integer')
+        if not isinstance(not_zero,float) or not_zero <= 0:
+            raise TypeError('not_zero must be a positive float')
+        if channels4detection is None:
+            channels4detection = list(range(self._MCD.data.shape[0]))
+        working_data = self.residual
+        sp = working_data[channels4detection,:].find_extrema(filter_length,threshold,minimal_dist,not_zero)
+        print('Number of detected spikes: ' + str(len(sp)))
+        res = np.zeros((len(sp),3),dtype=np.int)
+        for i in range(len(sp)):
+            res[i,:] = self._classify_and_align_evt(sp[i])
+        for i in range(self.nb_neurons):
+            spikes_from_neuron = sum(res[:,0] == i)
+            print('  Number of spikes from unit ' + str(i) + ': ' + str(spikes_from_neuron))
+        print('  Number of unclassified events:' + str(sum(res[:,0] == -1)))
+        self.sorting = np.row_stack((self.sorting,res))
+        idx = np.argsort(self.sorting[:,1])
+        self.sorting = self.sorting[idx,:]
+    
+#+END_SRC
+
+#+BEGIN_SRC python :session *Python* :results output exports both
+Sorting0 = Sorted(Data,center_catalogue)
+Sorting0.single_peel(threshold=-3,filter_length=5)
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+
+Number of detected spikes: 2242
+  Number of spikes from unit 0: 27
+  Number of spikes from unit 1: 66
+  Number of spikes from unit 2: 258
+  Number of spikes from unit 3: 124
+  Number of spikes from unit 4: 68
+  Number of spikes from unit 5: 605
+  Number of spikes from unit 6: 401
+  Number of spikes from unit 7: 630
+  Number of unclassified events:63
+#+end_example
+
+#+BEGIN_SRC python :session *Python* :results silent
+Sorting0.predict.plot()
+#+END_SRC
+
+#+BEGIN_SRC python :session *Python* :results silent
+Sorting0.residual.plot()
+#+END_SRC
+
+#+BEGIN_SRC python :session *Python* :results output exports both
+Sorting0.single_peel(channels4detection=0,threshold=-3,filter_length=3)
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Number of detected spikes: 556
+  Number of spikes from unit 0: 0
+  Number of spikes from unit 1: 12
+  Number of spikes from unit 2: 7
+  Number of spikes from unit 3: 6
+  Number of spikes from unit 4: 2
+  Number of spikes from unit 5: 136
+  Number of spikes from unit 6: 73
+  Number of spikes from unit 7: 205
+  Number of unclassified events:115
+#+end_example
+
+#+BEGIN_SRC python :session *Python* :results output exports both
+Sorting0.single_peel(channels4detection=1,threshold=-3,filter_length=3)
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Number of detected spikes: 456
+  Number of spikes from unit 0: 1
+  Number of spikes from unit 1: 1
+  Number of spikes from unit 2: 22
+  Number of spikes from unit 3: 0
+  Number of spikes from unit 4: 8
+  Number of spikes from unit 5: 116
+  Number of spikes from unit 6: 4
+  Number of spikes from unit 7: 188
+  Number of unclassified events:116
+#+end_example
+
+#+BEGIN_SRC python :session *Python* :results output exports both
+Sorting0.single_peel(channels4detection=2,threshold=-3,filter_length=3)
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Number of detected spikes: 552
+  Number of spikes from unit 0: 0
+  Number of spikes from unit 1: 0
+  Number of spikes from unit 2: 11
+  Number of spikes from unit 3: 2
+  Number of spikes from unit 4: 2
+  Number of spikes from unit 5: 193
+  Number of spikes from unit 6: 7
+  Number of spikes from unit 7: 208
+  Number of unclassified events:129
+#+end_example
+
+#+BEGIN_SRC python :session *Python* :results silent
+Sorting0.predict.plot()
+#+END_SRC
+
+#+BEGIN_SRC python :session *Python* :results silent
+Sorting0.residual.plot()
+#+END_SRC
+
+* Clean up, etc :export:
+
+#+BEGIN_SRC python :session *Python*
+hdf.close()
+import shelve
+db = shelve.open("locust20010201_sorting.db",protocol=-1)
+db['data_mad'] = data_mad
+db['data_median'] = data_median
+db['centers'] = centers
+db['round_all'] = round_all
+db['spike_trains'] = spike_trains
+db.close()
+#+END_SRC
+
+
+[fn:PouzatMazorLaurent2002] C. Pouzat, O. Mazor and G. Laurent (2002) [[http://xtof.perso.math.cnrs.fr/pdf/Pouzat+:2002.pdf][Using noise signature to optimize spike-sorting and to assess neuronal classification quality.]] /Journal of Neuroscience Methods/ *122*: 43-57.
+[fn:Pouzat2014] Pouzat, Christophe. (2015). Peri-Stimulus Time Histograms Estimation Through Poisson Regression Without Generalized Linear Models. Zenodo. [[http://dx.doi.org/10.5281/zenodo.14660][10.5281/zenodo.14660]].
+[fn:PouzatDetorakis2014] Christophe Pouzat. (2015). PouzatDetorakisEuroScipy2014: Complet avec référence. Zenodo. [[http://dx.doi.org/10.5281/zenodo.15070][10.5281/zenodo.15070]].
